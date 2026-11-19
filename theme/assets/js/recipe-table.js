@@ -93,6 +93,10 @@
         <div class="rt-controls">
           <span class="seg" role="group" aria-label="${t('Scale')}">${[0.5, 1, 2].map((x) => `<button type="button" data-scale="${x}" class="${servings === base * x ? 'on' : ''}">${x === 0.5 ? '½' : x}×</button>`).join('')}</span>
           <label>${t('Servings')} <input type="number" min="1" max="99" value="${servings}" data-serv></label>
+          ${opts.collections ? `<select class="rt-col" data-col aria-label="${esc(t('Add to collection…'))}">
+            <option value="">${esc(t('Add to collection…'))}</option>
+            ${opts.collections.list.map((c) => `<option value="${esc(c.id)}">${(recipe.collections || []).includes(c.id) ? '✓ ' : ''}${esc(c.name)}</option>`).join('')}
+            <option value="+">${esc(t('New collection…'))}</option></select>` : ''}
           ${(opts.actions || []).map((a, i) => `<button type="button" class="btn${a.primary ? ' primary' : ''}" data-act="${i}">${esc(a.label)}</button>`).join('')}
           <button type="button" class="btn" data-copy>${t('Copy')}</button>
           <button type="button" class="btn" data-print>${t('Print')}</button>
@@ -124,7 +128,10 @@
       } else if (b.dataset.act) return opts.actions[Number(b.dataset.act)].run(recipe, b);
       draw();
     };
-    el.onchange = (e) => { if (e.target.dataset.serv !== undefined) { servings = Math.max(1, Number(e.target.value) || base); draw(); } };
+    el.onchange = async (e) => {
+      if (e.target.dataset.serv !== undefined) { servings = Math.max(1, Number(e.target.value) || base); draw(); }
+      if (e.target.dataset.col !== undefined && e.target.value) { await opts.collections.pick(recipe, e.target.value); draw(); }
+    };
     draw();
     return { redraw: (stock) => { opts.stock = stock; draw(); } };
   }
@@ -142,13 +149,37 @@
     },
   });
 
-  window.RecipeTable = { render, layout, matches, findStock, strip, esc, isStaple, translateAction };
+  // Collections picker: toggling a collection saves the recipe (with its collections) to the member's kitchen.
+  const collectionsFor = (list, onSaved) => ({
+    list,
+    async pick(recipe, value) {
+      let id = value;
+      if (value === '+') {
+        const name = (prompt(t('Collection name')) || '').trim();
+        if (!name) return;
+        const r = await fetch('/api/collections', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+        if (!r.ok) return;
+        const c = await r.json(); list.push(c); id = c.id;
+      }
+      const has = new Set(recipe.collections || []);
+      const name = (list.find((c) => c.id === id) || {}).name;
+      has.has(id) ? has.delete(id) : has.add(id);
+      recipe.collections = [...has];
+      const r = await fetch('/api/recipes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(recipe) });
+      if (r.ok) { toast(t(has.has(id) ? 'Added to {name}' : 'Removed from {name}', { name })); onSaved && onSaved(recipe); }
+    },
+  });
+  const toast = (m) => { const d = document.createElement('div'); d.className = 'toast'; d.setAttribute('role', 'status'); d.textContent = m; document.body.append(d); setTimeout(() => d.remove(), 3000); };
+
+  window.RecipeTable = { render, layout, matches, findStock, strip, esc, isStaple, translateAction, collectionsFor, toast };
 
   // Posts: an HTML card holding <script type="application/recipe+json">{...}</script> becomes a table.
   const blocks = document.querySelectorAll('script[type="application/recipe+json"]');
   if (!blocks.length) return;
   const member = document.body.hasAttribute('data-member');
-  const stockP = member ? fetch('/api/stock').then((r) => (r.ok ? r.json() : null)).catch(() => null) : Promise.resolve(null);
+  const get = (u) => (member ? fetch(u).then((r) => (r.ok ? r.json() : null)).catch(() => null) : Promise.resolve(null));
+  const stockP = get('/api/stock');
+  const colsP = Promise.all([get('/api/collections?lang=' + window.I18N.lang), get('/api/recipes')]);
   blocks.forEach((s) => {
     let recipe;
     try { recipe = JSON.parse(s.textContent); } catch { return console.warn('Bad recipe JSON', s); }
@@ -156,15 +187,20 @@
     s.after(el);
     if (!recipe.id) recipe.id = 'post-' + location.pathname.replace(/\W+/g, '');
     let table;
+    let cols = null;
     const show = (r) => {
-      const actions = member ? [{ label: t('Save to my box'), primary: true, run: async (rec, b) => {
-        const res = await fetch('/api/recipes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(rec) });
-        b.textContent = res.ok ? t('Saved ✓') : t('Could not save');
-      } }, translateAction(r, show)] : [{ label: t('Save'), run: () => { window.location.hash = '#/portal/signup'; } }];
-      table = render(r, el, { actions: actions.filter(Boolean), head: false });
+      const actions = member ? [translateAction(r, show)] : [{ label: t('Save'), primary: true, run: () => { window.location.hash = '#/portal/signup'; } }];
+      table = render(r, el, { actions: actions.filter(Boolean), head: false, collections: cols });
       stockP.then((stock) => stock && table.redraw(stock));
     };
     show(recipe);
+    colsP.then(([list, saved]) => {
+      if (!list) return;
+      const mine = (saved || []).find((x) => x.id === recipe.id);
+      if (mine) recipe.collections = mine.collections || [];
+      cols = collectionsFor(list);
+      show(recipe);
+    });
     const spec = document.getElementById('spec');
     if (spec && recipe.time && !spec.querySelector('[data-time]')) spec.insertAdjacentHTML('afterbegin', `<div data-time><dt>${esc(t('Time'))}</dt><dd>${esc(recipe.time)}</dd></div>`);
   });

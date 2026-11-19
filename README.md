@@ -69,6 +69,13 @@ The UI is fully translated into **English, Español, Français, Português, Ital
 - **To add a language:** add it to `LANGS` and `D` in `i18n.js` and to `LANG_NAMES` in `server.js`.
 - **Ghost's own pieces** (the Portal signup popup and member emails) follow the site's publication language, because Ghost sets those per site, not per visitor.
 
+## My kitchen
+Each member's space: make tables, collections, stock, cook from stock. Rename it in **Ghost admin → Settings → Design → Kitchen name** (a theme custom setting); the default "My kitchen" is translated, a custom name shows as typed.
+
+- **Collections:** every account starts with three (Favourites, Want to try, Weeknight dinners, named in the member's language). Members add, rename and delete their own. Any recipe table has an **Add to collection…** picker; a recipe can sit in several. In the kitchen each collection is a 3D stack: pass through with the arrows, a swipe or the arrow keys; click the front card to open it, a back card to bring it forward; **Open** fans the whole collection out.
+- **Stock tags** are global and admin-only: names in 6 languages plus an SVG icon (14 built in; paste any SVG, e.g. from SVGRepo). The admin picks the AI mode: *off*, *assign existing tags*, or *assign and create* (the AI names the new tag in all languages and draws its icon). Icons render as CSS masks in the theme colour, so pasted SVG can't run code; the server also rejects scripts, event handlers and links in icons.
+- **Bonus AI uses:** the admin can set a member's usage for the month or grant bonus uses, which are spent after the monthly allowance and carry over.
+
 ## Publishing a recipe table
 Write a normal Ghost post and add an **HTML card** containing:
 ```html
@@ -93,7 +100,10 @@ Cookbook photos are OCR'd first. If the page has enough text (80+ characters), C
 | `POST /api/generate` `{ingredients, notes}` | recipe from stock (AI, metered) |
 | `POST /api/recognize` `{image}` | ingredients from a photo (AI, metered) |
 | `POST /api/translate` `{recipe, lang}` | translate a recipe (AI, metered) |
-| `/api/admin` | **admin center**: usage per member, reset usage (Bearer `ADMIN_TOKEN`) |
+| `GET/POST /api/collections`, `PATCH/DELETE /api/collections/:id` | the member's collections (3 starters on first visit) |
+| `GET /api/tags` | stock tags + the AI tagging mode |
+| `POST /api/stock/sort` | AI files untagged stock under tags (metered) |
+| `/api/admin` | **admin center** (Bearer `ADMIN_TOKEN`): analytics, edit usage and bonus AI uses per member, stock tags + icons, AI tagging mode |
 | `GET /api/health` | healthcheck |
 
 Images are sent as `data:image/...;base64,` URLs. The AI endpoints take an optional `lang` (`en es fr pt it de`). Every endpoint except health and admin requires a signed-in member.

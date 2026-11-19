@@ -4,49 +4,226 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Recepees Admin</title>
 <style>
-  :root { --bg:#faf5ec; --card:#fffdf8; --ink:#2a2118; --muted:#8a7b6a; --line:#eadfce; --accent:#d9482b; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#1c1814; --card:#26201b; --ink:#f3ebe0; --muted:#a8998a; --line:#3a3129; --accent:#ef6a4c; } }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
-  main { max-width:960px; margin:0 auto; padding:24px 16px; }
-  h1 { font-family:Georgia, serif; margin:0 0 4px; }
-  p { color:var(--muted); margin:0 0 16px; }
-  form, .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:16px; }
-  input { padding:9px 12px; border:1px solid var(--line); border-radius:9px; background:var(--bg); color:var(--ink); width:min(360px,100%); }
-  button { padding:9px 14px; border:0; border-radius:9px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }
-  .scroll { overflow-x:auto; }
-  table { width:100%; border-collapse:collapse; }
-  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  th { color:var(--muted); font-weight:600; font-size:13px; }
-  td.n { font-variant-numeric:tabular-nums; }
-  a { color:var(--accent); }
+  :root {
+    --bg: #f7f8f4; --card: #ffffff; --cell: #eef1f8; --line: #d9deec; --ink: #151a33; --muted: #5b6182;
+    --accent: #1e3fd0; --accent-ink: #fff; --tomato: #ee3b24; --butter: #ffd43b;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12152b; --card: #1a1e3a; --cell: #232850; --line: #2f3566; --ink: #f2f0e6; --muted: #a3a8c8;
+      --accent: #7d95ff; --accent-ink: #0e1126; --tomato: #ff5a3d;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 900; letter-spacing: -.02em; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 0 0 12px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; }
+  a { color: var(--accent); }
+  section, form.login { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 18px; }
+  input, select, textarea { font: inherit; color: inherit; background: var(--bg); border: 2px solid var(--line); border-radius: 10px; padding: 7px 10px; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button { font: inherit; font-weight: 700; padding: 7px 12px; border-radius: 10px; border: 2px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.danger { color: var(--tomato); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .muted { color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td input[type=number] { width: 84px; text-align: right; }
+  /* KPI tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .tile { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+  .tile b { display: block; font-size: 30px; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .tile span { color: var(--muted); font-size: 13.5px; }
+  /* chart */
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart .grid line { stroke: var(--line); stroke-width: 1; }
+  .chart .axis text { fill: var(--muted); font-size: 11px; }
+  .chart .hit { fill: transparent; }
+  .chart .col:hover .hit { fill: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 13.5px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.4; min-width: 140px; transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; z-index: 2; }
+  .tip i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+  .tip b { float: right; margin-left: 14px; font-variant-numeric: tabular-nums; }
+  details summary { cursor: pointer; color: var(--muted); font-weight: 600; margin-top: 10px; }
+  /* tags */
+  .ticon { display: inline-block; width: 26px; height: 26px; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+  .tags-grid { display: grid; gap: 10px; }
+  .tag { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: start; border: 2px solid var(--line); border-radius: 12px; padding: 10px; }
+  .tag .names { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; }
+  .tag .names input { width: 100%; padding: 5px 8px; font-size: 13.5px; }
+  .tag textarea { width: 100%; min-height: 54px; font: 12px/1.4 ui-monospace, monospace; margin-top: 6px; }
+  .tag .id { font-weight: 700; } .tag .src { font-size: 12px; color: var(--muted); }
+  .note { font-size: 13.5px; color: var(--muted); margin: 6px 0 12px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Recepees admin center</h1>
-  <p>AI usage per member this month. Members, tiers, Stripe and posts live in <a href="/ghost/">Ghost admin</a>.</p>
-  <form id="f"><input id="t" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" aria-label="Admin token"> <button>Load</button></form>
+  <h1>Admin center</h1>
+  <p class="sub">Usage, AI limits and stock tags. Members, plans, Stripe and posts live in <a href="/ghost/">Ghost admin</a>.</p>
+  <form class="login row" id="f"><input id="t" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" aria-label="Admin token"><button class="primary">Load</button></form>
   <div id="out"></div>
 </main>
 <script>
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';');
+  const say = (m) => { const d = document.createElement('div'); d.className = 'toast'; d.setAttribute('role', 'status'); d.textContent = m; document.body.append(d); setTimeout(() => d.remove(), 2500); };
   try { $('#t').value = sessionStorage.getItem('rt-admin') || ''; } catch {}
-  const call = (path, method = 'GET') => fetch(path, { method, headers: { authorization: 'Bearer ' + $('#t').value } })
+  const call = (path, method = 'GET', body) => fetch(path, { method, headers: { authorization: 'Bearer ' + $('#t').value, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
     .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; });
+
+  const KINDS = [['convert', 'Make a table'], ['generate', 'Cook from stock'], ['recognize', 'Stock photo'], ['translate', 'Translate'], ['sort', 'Sort stock'], ['ocr', 'OCR (free)']];
+  const LANGS = ['en', 'es', 'fr', 'pt', 'it', 'de'];
+  const MODES = { off: 'Off: no AI tagging', assign: 'AI assigns existing tags', create: 'AI assigns and may create new tags (with icons)' };
+  const icon = (svg) => `<span class="ticon" aria-hidden="true" style="${esc(`--icon:url("data:image/svg+xml,${encodeURIComponent(svg)}")`)}"></span>`;
+
+  function chart(st) {
+    // 30 days, stacked by kind, fixed colour order (series 1..6); hover a day for the breakdown.
+    const days = [...Array(30)].map((_, i) => new Date(Date.parse(st.since) + i * 864e5).toISOString().slice(0, 10));
+    const by = {}; for (const e of st.days) (by[e.day] ||= {})[e.kind] = e.n;
+    const tot = (d) => KINDS.reduce((a, [k]) => a + ((by[d] || {})[k] || 0), 0);
+    const max = Math.max(4, ...days.map(tot));
+    const step = Math.ceil(max / 4), top = step * 4;
+    const W = 720, H = 220, L = 32, B = 22, cw = (W - L) / 30, bw = Math.max(6, cw - 6);
+    const y = (v) => H - B - (v / top) * (H - B - 8);
+    const grid = [0, 1, 2, 3, 4].map((i) => `<line x1="${L}" x2="${W}" y1="${y(i * step)}" y2="${y(i * step)}"/>`).join('');
+    const ticks = [0, 1, 2, 3, 4].map((i) => `<text x="${L - 6}" y="${y(i * step) + 4}" text-anchor="end">${i * step}</text>`).join('');
+    const labels = days.map((d, i) => (i % 5 === 0 || i === 29) ? `<text x="${L + i * cw + cw / 2}" y="${H - 6}" text-anchor="middle">${d.slice(5).replace('-', '/')}</text>` : '').join('');
+    const cols = days.map((d, i) => {
+      let acc = 0; const x = L + i * cw + (cw - bw) / 2;
+      const segs = KINDS.map(([k], si) => {
+        const v = (by[d] || {})[k] || 0; if (!v) return '';
+        const y0 = y(acc), y1 = y(acc + v); acc += v;
+        const last = acc === tot(d);
+        // 2px surface gap between segments; rounded top on the last segment only
+        return `<path fill="var(--s${si + 1})" stroke="var(--card)" stroke-width="2" d="${last
+          ? `M${x},${y0} V${y1 + 4} Q${x},${y1} ${x + 4},${y1} H${x + bw - 4} Q${x + bw},${y1} ${x + bw},${y1 + 4} V${y0} Z`
+          : `M${x},${y0} V${y1} H${x + bw} V${y0} Z`}"/>`;
+      }).join('');
+      return `<g class="col" data-day="${d}"><rect class="hit" x="${L + i * cw}" y="0" width="${cw}" height="${H - B}"/>${segs}</g>`;
+    }).join('');
+    const totals = KINDS.map(([k, n], si) => ({ k, n, si, v: st.days.filter((e) => e.kind === k).reduce((a, e) => a + e.n, 0) }));
+    return `
+      <div class="chart" id="chart">
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="AI uses per day for the last 30 days, stacked by feature">
+          <g class="grid">${grid}</g><g class="axis">${ticks}${labels}</g>${cols}
+        </svg>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <ul class="legend">${KINDS.map(([k, n], si) => `<li><i style="background:var(--s${si + 1})"></i>${esc(n)}</li>`).join('')}</ul>
+      <details><summary>Show as a table</summary>
+        <table><thead><tr><th>Feature</th><th class="n">Last 30 days</th></tr></thead>
+        <tbody>${totals.map((x) => `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;background:var(--s${x.si + 1})"></span>${esc(x.n)}</td><td class="n">${x.v}</td></tr>`).join('')}</tbody></table>
+      </details>`;
+    function hover() {}
+  }
+  function wireChart(st) {
+    const el = $('#chart'), tip = $('#tip');
+    const by = {}; for (const e of st.days) (by[e.day] ||= {})[e.kind] = e.n;
+    el.addEventListener('mousemove', (e) => {
+      const g = e.target.closest('.col'); if (!g) { tip.hidden = true; return; }
+      const d = g.dataset.day, rows = KINDS.map(([k, n], si) => [n, (by[d] || {})[k] || 0, si]).filter((r) => r[1]);
+      const box = el.getBoundingClientRect(), r = g.querySelector('.hit').getBoundingClientRect();
+      tip.innerHTML = `<div style="font-weight:700;margin-bottom:4px">${d}</div>` + (rows.length ? rows.map(([n, v, si]) => `<div><i style="background:var(--s${si + 1})"></i>${esc(n)}<b>${v}</b></div>`).join('') : '<div>No AI use</div>');
+      tip.style.left = (r.left - box.left + r.width / 2) + 'px'; tip.style.top = (e.clientY - box.top) + 'px'; tip.hidden = false;
+    });
+    el.addEventListener('mouseleave', () => { tip.hidden = true; });
+  }
+
   async function load() {
     try { sessionStorage.setItem('rt-admin', $('#t').value); } catch {}
     try {
-      const d = await call('/api/admin/members');
-      const rows = d.members.sort((a, b) => (b.usage[d.month] || 0) - (a.usage[d.month] || 0)).map((m) => `<tr>
-        <td>${esc(m.email)}</td><td class="n">${m.usage[d.month] || 0}</td><td class="n">${m.recipes}</td><td class="n">${m.stock}</td>
-        <td><button data-reset="${esc(m.uuid)}">Reset usage</button></td></tr>`).join('');
-      $('#out').innerHTML = `<div class="card"><b>${d.members.length}</b> members · limits: free ${d.limits.free}, paid ${d.limits.paid} AI calls / month</div>
-        <div class="card scroll"><table><thead><tr><th>Member</th><th>AI used (${d.month})</th><th>Recipes</th><th>Stock</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5">No members have used the box yet.</td></tr>'}</tbody></table></div>`;
-    } catch (e) { $('#out').innerHTML = `<div class="card">${esc(e.message)}</div>`; }
+      const [st, mem, tg] = await Promise.all([call('/api/admin/stats'), call('/api/admin/members'), call('/api/admin/tags')]);
+      const mo = mem.month;
+      $('#out').innerHTML = `
+        <div class="tiles">
+          <div class="tile"><b>${st.members}</b><span>members, ${st.newMembers} new this month</span></div>
+          <div class="tile"><b>${st.aiMonth}</b><span>AI uses in ${esc(mo)}</span></div>
+          <div class="tile"><b>${st.recipes}</b><span>saved recipes</span></div>
+          <div class="tile"><b>${st.collections}</b><span>collections</span></div>
+          <div class="tile"><b>${st.stock}</b><span>stock items</span></div>
+          <div class="tile"><b>${st.bonusLeft}</b><span>bonus uses unspent</span></div>
+        </div>
+
+        <section><h2>AI use, last 30 days</h2>${chart(st)}</section>
+
+        <section>
+          <h2>Members</h2>
+          <p class="note">Monthly allowance: free ${mem.limits.free}, paid ${mem.limits.paid}. Bonus uses are spent after the allowance and carry over between months.</p>
+          <div class="scroll"><table>
+            <thead><tr><th>Member</th><th class="n">Used in ${esc(mo)}</th><th class="n">Bonus left</th><th class="n">Recipes</th><th class="n">Stock</th><th></th></tr></thead>
+            <tbody>${mem.members.map((m) => `<tr data-uuid="${esc(m.uuid)}">
+              <td>${esc(m.email)}</td>
+              <td class="n"><input type="number" min="0" name="used" value="${m.used}" aria-label="AI uses this month for ${esc(m.email)}"></td>
+              <td class="n"><input type="number" min="0" name="bonus" value="${m.bonus || 0}" aria-label="Bonus uses for ${esc(m.email)}"></td>
+              <td class="n">${m.recipes}</td><td class="n">${m.stock}</td>
+              <td class="row"><button data-give="50">+50 bonus</button><button class="primary" data-save>Save</button><button data-reset>Reset month</button></td>
+            </tr>`).join('') || '<tr><td colspan="6" class="muted">No members have opened their kitchen yet.</td></tr>'}</tbody>
+          </table></div>
+        </section>
+
+        <section>
+          <h2>Stock tags</h2>
+          <p class="note">Tags group every member's stock. Members can't edit them; you and (if allowed) the AI can. Icons are SVG: paste a full &lt;svg&gt; (from SVGRepo or anywhere) or just its inner paths on a 24×24 grid. They're shown as one-colour shapes that follow the theme.</p>
+          <div class="row" style="margin-bottom:12px"><label for="mode"><b>AI tagging</b></label>
+            <select id="mode">${Object.entries(MODES).map(([k, v]) => `<option value="${k}"${tg.mode === k ? ' selected' : ''}>${v}</option>`).join('')}</select></div>
+          <div class="tags-grid">${[...tg.tags, { id: '', names: {}, icon: '', source: 'new' }].map((x) => `
+            <form class="tag" data-tag="${esc(x.id)}">
+              <div>${x.icon ? icon(x.icon) : ''}</div>
+              <div>
+                ${x.id ? `<div><span class="id">${esc(x.id)}</span> <span class="src">${x.source === 'ai' ? 'created by AI' : 'admin'}</span></div>` : '<input name="id" placeholder="new-tag-id" pattern="[a-z0-9][a-z0-9-]{1,30}" aria-label="New tag id" required>'}
+                <div class="names">${LANGS.map((l) => `<input name="${l}" value="${esc(x.names[l] || '')}" placeholder="${l.toUpperCase()} name" aria-label="${l.toUpperCase()} name"${l === 'en' ? ' required' : ''}>`).join('')}</div>
+                <textarea name="icon" placeholder="<svg …> or <path d='…'/>" aria-label="Icon SVG" required>${esc(x.icon)}</textarea>
+              </div>
+              <div class="row" style="flex-direction:column;align-items:stretch">
+                <button class="primary">${x.id ? 'Save' : 'Add tag'}</button>
+                ${x.id ? '<button type="button" class="danger" data-deltag>Delete</button>' : ''}
+              </div>
+            </form>`).join('')}</div>
+        </section>`;
+      wireChart(st);
+    } catch (e) { $('#out').innerHTML = `<section>${esc(e.message)}</section>`; }
   }
+
   $('#f').onsubmit = (e) => { e.preventDefault(); load(); };
-  $('#out').onclick = async (e) => { const id = e.target.dataset.reset; if (id) { await call(`/api/admin/members/${id}/reset`, 'POST'); load(); } };
+  $('#out').addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const tr = b.closest('tr[data-uuid]');
+    try {
+      if (tr) {
+        const u = tr.dataset.uuid, val = (n) => tr.querySelector(`[name=${n}]`).value;
+        if (b.dataset.give) { tr.querySelector('[name=bonus]').value = Number(val('bonus')) + Number(b.dataset.give); return; }
+        if ('save' in b.dataset) { await call('/api/admin/members/' + u, 'PATCH', { used: val('used'), bonus: val('bonus') }); say('Saved'); return load(); }
+        if ('reset' in b.dataset) { await call(`/api/admin/members/${u}/reset`, 'POST'); say('Usage reset'); return load(); }
+      }
+      if ('deltag' in b.dataset) {
+        const id = b.closest('[data-tag]').dataset.tag;
+        if (!confirm(`Delete the tag "${id}"? Items with it move to "Other".`)) return;
+        await call('/api/admin/tags/' + id, 'DELETE'); say('Tag deleted'); load();
+      }
+    } catch (x) { say(x.message); }
+  });
+  $('#out').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target), id = e.target.dataset.tag || f.get('id');
+    try {
+      await call('/api/admin/tags/' + encodeURIComponent(id), 'PUT', { names: Object.fromEntries(LANGS.map((l) => [l, f.get(l)])), icon: f.get('icon') });
+      say('Tag saved'); load();
+    } catch (x) { say(x.message); }
+  });
+  $('#out').addEventListener('change', async (e) => {
+    if (e.target.id !== 'mode') return;
+    try { await call('/api/admin/settings', 'PUT', { ai_tags: e.target.value }); say('AI tagging updated'); } catch (x) { say(x.message); }
+  });
   if ($('#t').value) load();
 </script>
 </body>

@@ -1,10 +1,10 @@
 {{!< default}}
 {{#if @member}}
-  <div id="box" aria-live="polite"><p class="empty" data-t>Loading your recipe box…</p></div>
+  <div id="box" aria-live="polite"><p class="empty" data-t>Loading your kitchen…</p></div>
   <script src="{{asset "js/box.js"}}" defer></script>
 {{else}}
   <section class="intro">
-    <h1 data-t>Your recipe box</h1>
+    <h1 data-t>{{#if @custom.kitchen_name}}{{@custom.kitchen_name}}{{else}}My kitchen{{/if}}</h1>
     <p data-t>Turn any recipe (a link, pasted text or a photo of a cookbook page) into a recipe table, keep your kitchen stock, and cook from what you have.</p>
     <div class="row">
       <a href="#" data-portal="signup" class="btn primary" data-t>Create a free account</a>

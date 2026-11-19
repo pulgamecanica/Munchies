@@ -1,14 +1,39 @@
 {
   "name": "recepees",
   "description": "Recipe tables, a member recipe box and kitchen stock for Ghost.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
-  "engines": { "ghost": ">=5.0.0" },
-  "author": { "name": "Recepees", "email": "hello@example.com" },
-  "keywords": ["ghost-theme", "recipes"],
+  "engines": {
+    "ghost": ">=5.0.0"
+  },
+  "author": {
+    "name": "Recepees",
+    "email": "hello@example.com"
+  },
+  "keywords": [
+    "ghost-theme",
+    "recipes"
+  ],
   "config": {
     "posts_per_page": 24,
-    "image_sizes": { "s": { "width": 400 }, "m": { "width": 800 }, "l": { "width": 1600 } },
-    "card_assets": true
+    "image_sizes": {
+      "s": {
+        "width": 400
+      },
+      "m": {
+        "width": 800
+      },
+      "l": {
+        "width": 1600
+      }
+    },
+    "card_assets": true,
+    "custom": {
+      "kitchen_name": {
+        "type": "text",
+        "default": "My kitchen",
+        "description": "What members call their space: recipe collections, stock and AI tools."
+      }
+    }
   }
 }

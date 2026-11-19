@@ -15,7 +15,7 @@
     <a class="brand" href="{{@site.url}}">{{#if @site.logo}}<img src="{{@site.logo}}" alt="">{{else}}<span class="logo">🍳</span>{{/if}}<b>{{@site.title}}</b></a>
     <nav class="links" aria-label="Main">
       <a href="{{@site.url}}/" data-nav="/" data-t>Library</a>
-      <a href="{{@site.url}}/my/" data-nav="/my/" data-t>Recipe box</a>
+      <a href="{{@site.url}}/my/" data-nav="/my/" data-t>{{#if @custom.kitchen_name}}{{@custom.kitchen_name}}{{else}}My kitchen{{/if}}</a>
       {{#if @member}}<a href="#" data-portal="account" data-t>Account</a>{{else}}<a href="#" data-portal="signin" data-t>Sign in</a>{{/if}}
     </nav>
     <div class="top-actions">
@@ -31,7 +31,7 @@
   {{!-- Phones: app-style tab bar instead of a wrapping nav --}}
   <nav class="tabbar" aria-label="Main">
     <a href="{{@site.url}}/" data-nav="/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></svg><span data-t>Library</span></a>
-    <a href="{{@site.url}}/my/" data-nav="/my/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13.9A5 5 0 0 1 7.5 4.1a5 5 0 0 1 9 0A5 5 0 0 1 18 13.9V20H6z"/><path d="M6 17h12"/></svg><span data-t>Recipe box</span></a>
+    <a href="{{@site.url}}/my/" data-nav="/my/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 13.9A5 5 0 0 1 7.5 4.1a5 5 0 0 1 9 0A5 5 0 0 1 18 13.9V20H6z"/><path d="M6 17h12"/></svg><span data-t>{{#if @custom.kitchen_name}}{{@custom.kitchen_name}}{{else}}My kitchen{{/if}}</span></a>
     {{#if @member}}
     <a href="#" data-portal="account"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span data-t>Account</span></a>
     {{else}}

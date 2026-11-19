@@ -32,31 +32,89 @@ db.exec(`
   PRAGMA busy_timeout = 3000;
   CREATE TABLE IF NOT EXISTS members (uuid TEXT PRIMARY KEY, email TEXT, stock TEXT NOT NULL DEFAULT '[]', recipes TEXT NOT NULL DEFAULT '[]');
   CREATE TABLE IF NOT EXISTS usage (uuid TEXT NOT NULL, month TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (uuid, month));
+  CREATE TABLE IF NOT EXISTS tags (id TEXT PRIMARY KEY, names TEXT NOT NULL, icon TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'admin', created INTEGER NOT NULL DEFAULT (unixepoch()));
+  CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
+// collections: NULL until the member's first visit, then their 3 starter collections are created in their language
+const memberCols = db.prepare('PRAGMA table_info(members)').all().map((c) => c.name);
+if (!memberCols.includes('collections')) db.exec('ALTER TABLE members ADD COLUMN collections TEXT');
+if (!memberCols.includes('bonus')) db.exec('ALTER TABLE members ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0'); // extra AI uses granted by the admin, spent after the monthly allowance
+if (!memberCols.includes('created')) db.exec('ALTER TABLE members ADD COLUMN created INTEGER');
+// analytics: one counter per day and kind of action
+db.exec('CREATE TABLE IF NOT EXISTS events (day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind))');
+
+/* ---------- stock tags (global, admin-controlled) ---------- */
+// Icons are inner SVG markup on a 24x24 line grid, or a full <svg>. The theme draws them as CSS masks, so they never run scripts.
+const SVG_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">';
+const cleanIcon = (raw) => {
+  let svg = String(raw || '').trim();
+  if (!svg.startsWith('<svg')) svg = SVG_OPEN + svg + '</svg>';
+  if (svg.length > 8000 || /<script|<foreignObject|\bon\w+\s*=|javascript:|href\s*=|<!ENTITY|<style/i.test(svg)) throw fail(400, 'That icon is not a plain SVG.');
+  if (!/^<svg[\s>][\s\S]*<\/svg>$/.test(svg)) throw fail(400, 'That icon is not a plain SVG.');
+  if (!/xmlns=/.test(svg)) svg = svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+  return svg;
+};
+const TAG_ID = /^[a-z0-9][a-z0-9-]{1,30}$/;
+const cleanNames = (names) => {
+  const out = {};
+  for (const l of ['en', 'es', 'fr', 'pt', 'it', 'de']) if (names && names[l]) out[l] = String(names[l]).slice(0, 40);
+  if (!out.en) throw fail(400, 'A tag needs at least an English name.');
+  return out;
+};
+if (!db.prepare('SELECT 1 FROM tags LIMIT 1').get()) {
+  const ins = db.prepare('INSERT INTO tags (id, names, icon) VALUES (?, ?, ?)');
+  try { for (const t of JSON.parse(fs.readFileSync(path.join(__dirname, 'default-tags.json'), 'utf8'))) ins.run(t.id, JSON.stringify(t.names), cleanIcon(t.icon)); } catch (e) { console.error('default tags:', e.message); }
+}
+const tagList = () => db.prepare('SELECT id, names, icon, source FROM tags ORDER BY created, id').all().map((t) => ({ ...t, names: JSON.parse(t.names) }));
+const setting = (k, d) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value ?? d;
+const AI_TAG_MODES = ['off', 'assign', 'create'];
+const aiTagMode = () => setting('ai_tags', 'assign');
+
+/* ---------- collections (per member) ---------- */
+const STARTER = {
+  en: ['Favourites', 'Want to try', 'Weeknight dinners'], es: ['Favoritas', 'Por probar', 'Cenas rápidas'],
+  fr: ['Favoris', 'À essayer', 'Dîners de semaine'], pt: ['Favoritas', 'Para experimentar', 'Jantares rápidos'],
+  it: ['Preferite', 'Da provare', 'Cene veloci'], de: ['Favoriten', 'Ausprobieren', 'Schnelles Abendessen'],
+};
+const newId = (p) => p + Math.random().toString(36).slice(2, 9);
 let SEED = '[]';
 try { SEED = JSON.stringify(JSON.parse(fs.readFileSync(path.join(__dirname, 'seed-recipes.json'), 'utf8'))); } catch {}
 
 const q = {
-  upsert: db.prepare('INSERT INTO members (uuid, email, recipes) VALUES (?, ?, ?) ON CONFLICT(uuid) DO UPDATE SET email = excluded.email'),
+  upsert: db.prepare('INSERT INTO members (uuid, email, recipes, created) VALUES (?, ?, ?, unixepoch()) ON CONFLICT(uuid) DO UPDATE SET email = excluded.email'),
+  bonus: db.prepare('SELECT bonus FROM members WHERE uuid = ?'),
+  takeBonus: db.prepare('UPDATE members SET bonus = bonus - 1 WHERE uuid = ? AND bonus > 0'),
+  giveBonus: db.prepare('UPDATE members SET bonus = bonus + 1 WHERE uuid = ?'),
+  event: db.prepare('INSERT INTO events (day, kind, n) VALUES (?, ?, 1) ON CONFLICT(day, kind) DO UPDATE SET n = n + 1'),
   get: db.prepare('SELECT stock, recipes FROM members WHERE uuid = ?'),
   setStock: db.prepare('UPDATE members SET stock = ? WHERE uuid = ?'),
   setRecipes: db.prepare('UPDATE members SET recipes = ? WHERE uuid = ?'),
+  getCols: db.prepare('SELECT collections FROM members WHERE uuid = ?'),
+  setCols: db.prepare('UPDATE members SET collections = ? WHERE uuid = ?'),
   used: db.prepare('SELECT used FROM usage WHERE uuid = ? AND month = ?'),
   // Atomic: only counts when under the limit, so parallel requests can't overshoot.
   take: db.prepare('INSERT INTO usage (uuid, month, used) VALUES (?, ?, 1) ON CONFLICT(uuid, month) DO UPDATE SET used = used + 1 WHERE used < ?'),
   refund: db.prepare('UPDATE usage SET used = MAX(0, used - 1) WHERE uuid = ? AND month = ?'),
   reset: db.prepare('UPDATE usage SET used = 0 WHERE uuid = ? AND month = ?'),
-  admin: db.prepare(`SELECT m.uuid, m.email, json_array_length(m.recipes) AS recipes, json_array_length(m.stock) AS stock, COALESCE(u.used, 0) AS used
+  admin: db.prepare(`SELECT m.uuid, m.email, m.bonus, json_array_length(m.recipes) AS recipes, json_array_length(m.stock) AS stock, COALESCE(u.used, 0) AS used
                      FROM members m LEFT JOIN usage u ON u.uuid = m.uuid AND u.month = ? ORDER BY used DESC, m.email`),
 };
 const month = () => new Date().toISOString().slice(0, 7);
 const tierOf = (m) => (m.status === 'free' ? 'free' : 'paid'); // paid + comped
-const usageOf = (m) => ({ month: month(), used: q.used.get(m.uuid, month())?.used || 0, limit: LIMITS[tierOf(m)], tier: tierOf(m) });
+const usageOf = (m) => ({ month: month(), used: q.used.get(m.uuid, month())?.used || 0, limit: LIMITS[tierOf(m)], bonus: q.bonus.get(m.uuid)?.bonus || 0, tier: tierOf(m) });
+const today = () => new Date().toISOString().slice(0, 10);
+const track = (kind) => { try { q.event.run(today(), kind); } catch {} };
 
-async function withQuota(m, fn) {
+// Monthly allowance first, then admin-granted bonus uses. Both take/refund are single SQL statements (no overshoot).
+async function withQuota(m, kind, fn) {
   const limit = LIMITS[tierOf(m)];
-  if (limit <= 0 || q.take.run(m.uuid, month(), limit).changes === 0) throw fail(402, "You've used all your AI uses this month. Upgrade for more.");
-  try { return await fn(); } catch (e) { q.refund.run(m.uuid, month()); throw e; }
+  let from = 'month';
+  if (limit <= 0 || q.take.run(m.uuid, month(), limit).changes === 0) {
+    if (q.takeBonus.run(m.uuid).changes === 0) throw fail(402, "You've used all your AI uses this month. Upgrade for more.");
+    from = 'bonus';
+  }
+  try { const out = await fn(); track(kind); return out; }
+  catch (e) { from === 'bonus' ? q.giveBonus.run(m.uuid) : q.refund.run(m.uuid, month()); throw e; }
 }
 
 /* ---------- http helpers ---------- */
@@ -108,7 +166,8 @@ async function currentMember(req) {
   const r = await fetch(GHOST + '/members/api/member/', {
     headers: { cookie, host: req.headers.host || 'localhost', 'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http' },
   }).catch(() => null);
-  const data = r && r.ok ? await r.json().catch(() => null) : null;
+  if (!r || r.status >= 500) throw fail(503, 'Accounts are briefly unavailable, try again in a moment.'); // don't cache an outage as "signed out"
+  const data = r.ok ? await r.json().catch(() => null) : null;
   const m = data && data.uuid ? data : null;
   if (members.size > 20000) members.clear();
   members.set(cookie, { m, exp: Date.now() + 30000 });
@@ -198,13 +257,56 @@ async function api(req, res, p) {
 
   if (p === '/api/admin' || p === '/api/admin/') {
     return send(res, 200, fs.readFileSync(path.join(__dirname, 'admin.html')), 'text/html; charset=utf-8',
-      { 'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'" });
+      { 'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'" });
   }
   if (p.startsWith('/api/admin/')) {
     if (!ADMIN_TOKEN || req.headers.authorization !== 'Bearer ' + ADMIN_TOKEN) throw fail(401, 'Bad admin token.');
     if (p === '/api/admin/members' && req.method === 'GET') {
       const mo = month();
       return send(res, 200, { month: mo, limits: LIMITS, members: q.admin.all(mo).map((r) => ({ ...r, usage: { [mo]: r.used } })) });
+    }
+    if (p === '/api/admin/tags' && req.method === 'GET') return send(res, 200, { mode: aiTagMode(), modes: AI_TAG_MODES, tags: tagList() });
+    if (p === '/api/admin/settings' && req.method === 'PUT') {
+      const b = await readBody(req, 4096);
+      if (!AI_TAG_MODES.includes(b.ai_tags)) throw fail(400, 'Unknown AI tag mode.');
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('ai_tags', b.ai_tags);
+      return send(res, 200, { ok: true });
+    }
+    const tagM = /^\/api\/admin\/tags\/([a-z0-9-]+)$/.exec(p);
+    if (tagM && req.method === 'PUT') {
+      if (!TAG_ID.test(tagM[1])) throw fail(400, 'Tag ids are lowercase letters, digits and dashes.');
+      const b = await readBody(req, 64 * 1024);
+      db.prepare("INSERT INTO tags (id, names, icon, source) VALUES (?, ?, ?, 'admin') ON CONFLICT(id) DO UPDATE SET names = excluded.names, icon = excluded.icon, source = 'admin'")
+        .run(tagM[1], JSON.stringify(cleanNames(b.names)), cleanIcon(b.icon));
+      return send(res, 200, { ok: true });
+    }
+    if (tagM && req.method === 'DELETE') { db.prepare('DELETE FROM tags WHERE id = ?').run(tagM[1]); return send(res, 200, { ok: true }); }
+    const edit = /^\/api\/admin\/members\/([a-f0-9-]+)$/i.exec(p);
+    if (edit && req.method === 'PATCH') {
+      // Set this month's used count and/or the bonus pool, e.g. { "bonus": 50 } to give someone 50 extra AI uses.
+      const b = await readBody(req, 4096);
+      const n = (v) => Math.max(0, Math.min(1e6, Math.floor(Number(v))));
+      if (b.used !== undefined && Number.isFinite(Number(b.used)))
+        db.prepare('INSERT INTO usage (uuid, month, used) VALUES (?, ?, ?) ON CONFLICT(uuid, month) DO UPDATE SET used = excluded.used').run(edit[1], month(), n(b.used));
+      if (b.bonus !== undefined && Number.isFinite(Number(b.bonus))) db.prepare('UPDATE members SET bonus = ? WHERE uuid = ?').run(n(b.bonus), edit[1]);
+      return send(res, 200, { ok: true });
+    }
+    if (p === '/api/admin/stats' && req.method === 'GET') {
+      const one = (sql, ...a) => Object.values(db.prepare(sql).get(...a) || { n: 0 })[0] || 0;
+      const since = new Date(Date.now() - 29 * 864e5).toISOString().slice(0, 10);
+      return send(res, 200, {
+        month: month(),
+        members: one('SELECT COUNT(*) FROM members'),
+        newMembers: one("SELECT COUNT(*) FROM members WHERE created >= unixepoch('now', 'start of month')"),
+        recipes: one('SELECT COALESCE(SUM(json_array_length(recipes)), 0) FROM members'),
+        collections: one('SELECT COALESCE(SUM(json_array_length(collections)), 0) FROM members WHERE collections IS NOT NULL'),
+        stock: one('SELECT COALESCE(SUM(json_array_length(stock)), 0) FROM members'),
+        aiMonth: one('SELECT COALESCE(SUM(used), 0) FROM usage WHERE month = ?', month()),
+        bonusLeft: one('SELECT COALESCE(SUM(bonus), 0) FROM members'),
+        tags: one('SELECT COUNT(*) FROM tags'), aiTags: one("SELECT COUNT(*) FROM tags WHERE source = 'ai'"),
+        days: db.prepare('SELECT day, kind, n FROM events WHERE day >= ? ORDER BY day').all(since),
+        since,
+      });
     }
     const reset = /^\/api\/admin\/members\/([a-f0-9-]+)\/reset$/i.exec(p);
     if (reset && req.method === 'POST') { q.reset.run(reset[1], month()); return send(res, 200, { ok: true }); }
@@ -226,11 +328,39 @@ async function api(req, res, p) {
     return send(res, 200, { ok: true });
   }
 
+  if (p === '/api/tags' && req.method === 'GET') return send(res, 200, { mode: aiTagMode(), tags: tagList() });
+
+  // Collections: [{ id, name }]. A recipe lists the collections it's in as recipe.collections = [ids].
+  let cols = JSON.parse(q.getCols.get(m.uuid)?.collections || 'null');
+  if (!cols) { cols = (STARTER[langOf(new URL(req.url, 'http://x').searchParams.get('lang'))] || STARTER.en).map((name) => ({ id: newId('c'), name })); q.setCols.run(JSON.stringify(cols), m.uuid); }
+  if (p === '/api/collections' && req.method === 'GET') return send(res, 200, cols);
+  if (p === '/api/collections' && req.method === 'POST') {
+    const name = String((await readBody(req, 4096)).name || '').trim().slice(0, 60);
+    if (!name) throw fail(400, 'Give the collection a name.');
+    if (cols.length >= 50) throw fail(400, 'That is the maximum number of collections.');
+    const c = { id: newId('c'), name };
+    q.setCols.run(JSON.stringify([...cols, c]), m.uuid);
+    return send(res, 200, c);
+  }
+  const colM = /^\/api\/collections\/(c[a-z0-9]+)$/.exec(p);
+  if (colM && req.method === 'PATCH') {
+    const name = String((await readBody(req, 4096)).name || '').trim().slice(0, 60);
+    if (!name) throw fail(400, 'Give the collection a name.');
+    q.setCols.run(JSON.stringify(cols.map((c) => (c.id === colM[1] ? { ...c, name } : c))), m.uuid);
+    return send(res, 200, { ok: true });
+  }
+  if (colM && req.method === 'DELETE') {
+    q.setCols.run(JSON.stringify(cols.filter((c) => c.id !== colM[1])), m.uuid);
+    q.setRecipes.run(JSON.stringify(recipes.map((r) => ({ ...r, collections: (r.collections || []).filter((id) => id !== colM[1]) }))), m.uuid);
+    return send(res, 200, { ok: true });
+  }
+
   if (p === '/api/recipes' && req.method === 'GET') return send(res, 200, recipes);
   if (p === '/api/recipes' && req.method === 'POST') {
     const r = await readBody(req, 512 * 1024);
     if (!r.title || !Array.isArray(r.steps)) throw fail(400, 'Invalid recipe');
     r.id = String(r.id || 'r' + Date.now().toString(36)).slice(0, 80);
+    r.collections = [...new Set((Array.isArray(r.collections) ? r.collections : []).filter((id) => cols.some((c) => c.id === id)))];
     q.setRecipes.run(JSON.stringify([...recipes.filter((x) => x.id !== r.id), r].slice(-1000)), m.uuid);
     return send(res, 200, r);
   }
@@ -247,13 +377,43 @@ async function api(req, res, p) {
     // Free (not metered): plain text from a photo, so anyone can edit it before making a table.
     const text = await ocr(body.image);
     if (!text) throw fail(422, 'Could not read any text in that photo.');
+    track('ocr');
     return send(res, 200, { text });
   }
   if (p === '/api/recognize') {
     const img = imagePart(body.image);
-    const prompt = RECOGNIZE_PROMPT + (langOf(body.lang) ? ` Write names and notes in ${LANG_NAMES[body.lang]} instead of English.` : '');
-    const items = await withQuota(m, async () => extractJson(await callClaude([img, { type: 'text', text: prompt }], 'You identify food in photos for a kitchen stock tracker. Reply with JSON only.', 1200)).items);
-    return send(res, 200, { items: Array.isArray(items) ? items : [] });
+    const tags = aiTagMode() === 'off' ? [] : tagList();
+    const prompt = RECOGNIZE_PROMPT + (langOf(body.lang) ? ` Write names and notes in ${LANG_NAMES[body.lang]} instead of English.` : '') +
+      (tags.length ? ` Also give each item a "tag": the best id from ${JSON.stringify(tags.map((t) => ({ id: t.id, name: t.names.en })))}, or "" if none fits.` : '');
+    const items = await withQuota(m, 'recognize', async () => extractJson(await callClaude([img, { type: 'text', text: prompt }], 'You identify food in photos for a kitchen stock tracker. Reply with JSON only.', 1200)).items);
+    const ids = new Set(tags.map((t) => t.id));
+    return send(res, 200, { items: (Array.isArray(items) ? items : []).map((it) => ({ ...it, tag: ids.has(it.tag) ? it.tag : '' })) });
+  }
+  if (p === '/api/stock/sort') {
+    // AI sorts the member's stock into the admin's tags; in "create" mode it may add new tags, icon included.
+    const mode = aiTagMode();
+    if (mode === 'off') throw fail(403, 'Sorting with AI is turned off.');
+    const items = stock.map((s, i) => ({ i, name: s.name, note: s.note || '' })).filter((x, i) => body.all || !stock[i].tag);
+    if (!items.length) return send(res, 200, { stock, created: [] });
+    const tags = tagList();
+    const prompt = `Kitchen stock items: ${JSON.stringify(items.slice(0, 200))}\nTags: ${JSON.stringify(tags.map((t) => ({ id: t.id, name: t.names.en })))}\n` +
+      'Give every item exactly one tag id. ' + (mode === 'create'
+        ? 'If no tag fits an item, create a new tag and use its id. Create as few new tags as possible, only for a real food category. A new tag is ' +
+          '{"id":"kebab-case english","names":{"en":"","es":"","fr":"","pt":"","it":"","de":""},"icon":"inner SVG for a 24x24 viewBox: a simple line icon of the category made of <path>, <circle>, <ellipse> or <rect> elements only, no fills, no text"}. '
+        : 'Use only these tag ids; if none fits, use "". ') +
+      'Reply with JSON only: {"assign":[{"i":0,"tag":"id"}],"new":[]}';
+    const out = await withQuota(m, 'sort', async () => extractJson(await callClaude(prompt, 'You organise a kitchen stock into categories. Reply with JSON only.', 4000)));
+    const created = [];
+    if (mode === 'create') {
+      const ins = db.prepare("INSERT OR IGNORE INTO tags (id, names, icon, source) VALUES (?, ?, ?, 'ai')");
+      for (const t of (out.new || []).slice(0, 5)) {
+        try { if (TAG_ID.test(t.id)) { ins.run(t.id, JSON.stringify(cleanNames(t.names)), cleanIcon(t.icon)); created.push(t.id); } } catch {}
+      }
+    }
+    const ids = new Set(tagList().map((t) => t.id));
+    for (const a of out.assign || []) if (stock[a.i] && ids.has(a.tag)) stock[a.i].tag = a.tag;
+    q.setStock.run(JSON.stringify(stock), m.uuid);
+    return send(res, 200, { stock, created });
   }
   if (p === '/api/generate') {
     const ing = (body.ingredients || []).map(String).slice(0, 80);
@@ -261,7 +421,7 @@ async function api(req, res, p) {
     const prompt = `Create one recipe using mainly these ingredients: ${ing.join(', ')}.\n` +
       (body.notes ? `Preferences: ${String(body.notes).slice(0, 500)}\n` : '') +
       'Assume salt, pepper, oil and water are available; anything else not listed is optional or minimal.\n' + RECIPE_SHAPE + writeIn(body.lang);
-    return send(res, 200, await withQuota(m, async () => asRecipe(await callClaude(prompt, RECIPE_SYSTEM), { generated: true, lang: langOf(body.lang) || undefined })));
+    return send(res, 200, await withQuota(m, 'generate', async () => asRecipe(await callClaude(prompt, RECIPE_SYSTEM), { generated: true, lang: langOf(body.lang) || undefined })));
   }
   if (p === '/api/convert') {
     // "Make a table": from a link, pasted text, or a photo of a cookbook page (OCR first, vision as fallback).
@@ -279,7 +439,7 @@ async function api(req, res, p) {
     else throw fail(400, 'Send a url, text or image.');
     const extra = writeIn(body.lang);
     if (typeof content === 'string') content += extra; else content[1].text += extra;
-    return send(res, 200, await withQuota(m, async () => {
+    return send(res, 200, await withQuota(m, 'convert', async () => {
       const r = asRecipe(await callClaude(content, RECIPE_SYSTEM, 4000), { lang: langOf(body.lang) || undefined });
       return { ...r, source: { ...(r.source || {}), ...source } };
     }));
@@ -291,7 +451,7 @@ async function api(req, res, p) {
     const { id, source, lang, ...text } = r;
     const prompt = `Translate this recipe JSON into ${LANG_NAMES[l]}. Translate title, description, tags, every steps[].text, every steps[].uses[].name and notes. ` +
       'Keep every other key, number, unit, emoji and the "after" arrays exactly as they are. Reply with the full JSON only.\n\n' + JSON.stringify(text).slice(0, 60000);
-    return send(res, 200, await withQuota(m, async () => ({ ...asRecipe(await callClaude(prompt, RECIPE_SYSTEM, 4000)), id: `${id || 'r'}-${l}`, source, lang: l })));
+    return send(res, 200, await withQuota(m, 'translate', async () => ({ ...asRecipe(await callClaude(prompt, RECIPE_SYSTEM, 4000)), id: `${id || 'r'}-${l}`, source, lang: l })));
   }
   throw fail(404, 'Not found');
 }
