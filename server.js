@@ -303,7 +303,9 @@ const server = http.createServer(async (req, res) => {
 server.headersTimeout = 20000;
 server.requestTimeout = 120000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Recepees gateway on :${PORT} -> Ghost ${GHOST}, OCR ${OCR} | AI ${process.env.ANTHROPIC_API_KEY ? 'on (' + MODEL + ')' : 'off'} | admin ${ADMIN_TOKEN ? 'on' : 'off (set ADMIN_TOKEN)'}`);
+  const site = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
+  console.log(`\n  Recepees is up -> open ${site}\n  Ghost admin ${site}/ghost | usage admin ${site}/api/admin`);
+  console.log(`  AI ${process.env.ANTHROPIC_API_KEY ? 'on (' + MODEL + ')' : 'off'} | admin token ${ADMIN_TOKEN ? 'set' : 'not set'} | internal: ghost=${GHOST} ocr=${OCR}\n`);
 });
 const stop = () => server.close(() => { db.close(); process.exit(0); });
 process.on('SIGTERM', stop);
