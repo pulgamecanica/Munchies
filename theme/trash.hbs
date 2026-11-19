@@ -1,0 +1,7 @@
+{{!< default}}
+{{#if @member}}
+  <div id="trash" class="trash-page" aria-live="polite"><p class="empty" data-t>Loading…</p></div>
+  <script src="{{asset "js/trash.js"}}" defer></script>
+{{else}}
+  <section class="intro"><h1 data-t>Trash</h1><p><a href="#" data-portal="signin" data-t>Sign in</a></p></section>
+{{/if}}

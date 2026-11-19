@@ -4,7 +4,7 @@
   <h1 data-t>Less scrolling, more cooking.</h1>
   <p>{{@site.description}}</p>
   <div class="row">
-    <a class="btn primary" href="{{@site.url}}/my/" data-t>Make a table from any recipe →</a>
+    <a class="btn primary" href="{{@site.url}}/my/" data-t>Create a recipe from any recipe →</a>
   </div>
 </section>
 {{/is}}
@@ -23,7 +23,7 @@
     <div class="tags">{{#foreach tags}}<span>{{name}}</span>{{/foreach}}{{#unless access}}<span class="lock" data-t>Pro</span>{{/unless}}</div>
   </a>
   {{else}}
-  <p class="empty" data-t>No recipes yet. Write a post in Ghost admin and paste a recipe table block into an HTML card.</p>
+  <p class="empty" data-t>No recipes yet. Write a post in Ghost admin and paste a recipe block into an HTML card.</p>
   {{/foreach}}
 </div>
 {{pagination}}

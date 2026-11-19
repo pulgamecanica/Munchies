@@ -81,7 +81,7 @@
   const call = (path, method = 'GET', body) => fetch(path, { method, headers: { authorization: 'Bearer ' + $('#t').value, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
     .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; });
 
-  const KINDS = [['convert', 'Make a table'], ['generate', 'Cook from stock'], ['recognize', 'Stock photo'], ['translate', 'Translate'], ['sort', 'Sort stock'], ['ocr', 'OCR (free)']];
+  const KINDS = [['convert', 'Create a recipe'], ['generate', 'Cook from stock'], ['recognize', 'Stock photo'], ['translate', 'Translate'], ['sort', 'Sort stock'], ['ocr', 'OCR (free)']];
   const LANGS = ['en', 'es', 'fr', 'pt', 'it', 'de'];
   const MODES = { off: 'Off: no AI tagging', assign: 'AI assigns existing tags', create: 'AI assigns and may create new tags (with icons)' };
   const icon = (svg) => `<span class="ticon" aria-hidden="true" style="${esc(`--icon:url("data:image/svg+xml,${encodeURIComponent(svg)}")`)}"></span>`;

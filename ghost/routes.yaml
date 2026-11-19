@@ -1,6 +1,7 @@
 # Copied into Ghost's content/settings at boot. Edits in Ghost admin get replaced on redeploy: change this file instead.
 routes:
   /my/: my
+  /my/trash/: trash
 
 collections:
   /:

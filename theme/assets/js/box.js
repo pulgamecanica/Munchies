@@ -13,7 +13,19 @@
     if (!r.ok) throw new Error(t(d.error || 'Request failed'));
     return d;
   }
-  const say = (m) => { const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.append(t); setTimeout(() => t.remove(), 3500); };
+  const say = (m, action) => {
+    const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role', 'status'); el.textContent = m;
+    if (action) { const b = document.createElement('button'); b.type = 'button'; b.textContent = action.label; b.onclick = () => { el.remove(); action.run(); }; el.append(' ', b); }
+    document.body.append(el); setTimeout(() => el.remove(), action ? 7000 : 3500);
+  };
+  // Deletes go to the trash; the toast offers Undo, which restores from the trash.
+  const trashed = (res) => (S.trashCount = (S.trashCount || 0) + 1, say(t('Moved to trash'), { label: t('Undo'), run: async () => {
+    try { await api(`/api/trash/${res.trash}/restore`, {}); S.trashCount = Math.max(0, S.trashCount - 1); await reload(); say(t('Restored')); } catch (x) { say(x.message); }
+  } }));
+  async function reload() {
+    const [stock, recipes, cols] = await Promise.all([api('/api/stock'), api('/api/recipes'), api('/api/collections?lang=' + lang)]);
+    Object.assign(S, { stock, recipes, cols }); draw();
+  }
 
   let saveT;
   const saveStock = () => { clearTimeout(saveT); saveT = setTimeout(() => api('/api/stock', S.stock, 'PUT').catch((e) => say(e.message)), 300); };
@@ -44,7 +56,7 @@
     const keep = (r) => { const i = S.recipes.findIndex((x) => x.id === r.id); if (i < 0) S.recipes.push(r); else S.recipes[i] = r; draw(); };
     render(recipe, v, { stock: S.stock, collections: collectionsFor(S.cols, keep), actions: [
       saved
-        ? { label: t('Remove from kitchen'), run: async (r) => { if (!confirm(t('Delete this recipe?'))) return; await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; draw(); } }
+        ? { label: t('Move to trash'), run: async (r) => { const res = await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; draw(); trashed(res); } }
         : { label: t('Save'), primary: true, run: async (r) => { keep(await api('/api/recipes', r)); say(t('Saved ✓')); open(r); } },
       translateAction(recipe, (tr) => { S.me.usage.used++; draw(); open(tr); }),
       { label: t('Cooked it: use up stock'), run: (r) => {
@@ -134,7 +146,7 @@
     return `
       <article class="cstack${n ? '' : ' is-empty'}" data-stack="${esc(g.id)}">
         <div class="stack-cards" tabindex="${n ? 0 : -1}" role="group" aria-label="${esc(g.name)}">
-          ${cards || `<div class="scard ghost" style="--i:0"><span>${esc(t('Nothing here yet. Use "Add to collection" on any recipe table.'))}</span></div><div class="scard ghost" style="--i:1"></div><div class="scard ghost" style="--i:2"></div>`}
+          ${cards || `<div class="scard ghost" style="--i:0"><span>${esc(t('Nothing here yet. Use "Add to collection" on any recipe.'))}</span></div><div class="scard ghost" style="--i:1"></div><div class="scard ghost" style="--i:2"></div>`}
         </div>
         <footer class="stack-foot">
           ${head(g)}
@@ -148,7 +160,7 @@
   }
   function blockHTML(g) {
     // Grid and list layouts take the full width.
-    const body = !g.recipes.length ? `<p class="empty">${esc(t('Nothing here yet. Use "Add to collection" on any recipe table.'))}</p>`
+    const body = !g.recipes.length ? `<p class="empty">${esc(t('Nothing here yet. Use "Add to collection" on any recipe.'))}</p>`
       : g.layout === 'grid'
         ? `<div class="grid">${g.recipes.map((r) => `<button type="button" class="card post-card mini" data-rid="${esc(r.id)}">${cardFace(r)}</button>`).join('')}</div>`
         : `<ul class="rlist">${g.recipes.map((r) => `<li><button type="button" data-rid="${esc(r.id)}"><span class="scard-emoji" aria-hidden="true">${esc(r.emoji || '🍽️')}</span><span class="rlist-title">${esc(r.title)}</span>${r.time ? `<small>${esc(r.time)}</small>` : ''}${badge(r)}</button></li>`).join('')}</ul>`;
@@ -171,7 +183,7 @@
         <div class="row col-settings-foot">
           <button type="button" class="btn" data-move="-1" ${i <= 0 ? 'disabled' : ''}>‹ ${esc(t('Move left'))}</button>
           <button type="button" class="btn" data-move="1" ${i >= S.cols.length - 1 ? 'disabled' : ''}>${esc(t('Move right'))} ›</button>
-          <button type="button" class="btn danger" data-delcol>${esc(t('Delete collection'))}</button>
+          <button type="button" class="btn danger" data-delcol>${esc(t('Move to trash'))}</button>
         </div>
       </form>`;
   }
@@ -249,14 +261,14 @@
       </section>
 
       <section class="card">
-        <h2>${t('Make a table')}</h2>
+        <h2>${t('Create a recipe')}</h2>
         <div class="seg" role="tablist">${[['url', 'Link'], ['text', 'Paste text'], ['photo', 'Cookbook photo']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${S.mode === k}" class="${S.mode === k ? 'on' : ''}" data-mode="${k}">${t(l)}</button>`).join('')}</div>
         <form id="convert" class="stack">
           ${S.mode === 'url' ? '<input name="url" type="url" required placeholder="https://a-recipe-blog.com/banana-bread" aria-label="' + t('Recipe link') + '">' : ''}
           ${S.mode === 'text' ? `<textarea name="text" rows="${S.draft ? 14 : 6}" required placeholder="${t('Paste the whole recipe here…')}" aria-label="${t('Recipe text')}">${esc(S.draft || '')}</textarea>` : ''}
-          ${S.mode === 'photo' ? zone('convert', { title: t('Photo of a cookbook page'), hint: t('Drop it here, tap to browse, or paste it'), imgs: S.photo ? [S.photo.url] : [], busy: S.busy === 'convert' ? t('Building your table…') : S.busy === 'ocr' ? t('Reading…') : '' }) : ''}
+          ${S.mode === 'photo' ? zone('convert', { title: t('Photo of a cookbook page'), hint: t('Drop it here, tap to browse, or paste it'), imgs: S.photo ? [S.photo.url] : [], busy: S.busy === 'convert' ? t('Creating your recipe…') : S.busy === 'ocr' ? t('Reading…') : '' }) : ''}
           <div class="row">
-            <button class="btn primary" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'convert' ? 'Building your table…' : 'Make my table →')}</button>
+            <button class="btn primary" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'convert' ? 'Creating your recipe…' : 'Create my recipe')}</button>
             ${S.mode === 'photo' ? `<button class="btn" name="ocr" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'ocr' ? 'Reading…' : 'Extract text only (free)')}</button>` : ''}
           </div>
         </form>
@@ -293,7 +305,9 @@
           <textarea name="notes" rows="2" placeholder="${t('Optional: vegetarian, under 20 minutes, Italian…')}" aria-label="${t('Preferences')}"></textarea>
           <button class="btn primary" ${S.busy || !S.stock.length ? 'disabled' : ''}>${t(S.busy === 'gen' ? 'Cooking up an idea…' : 'Generate a recipe from everything I have')}</button>
         </form>
-      </section>`;
+      </section>
+
+      <a class="trash-link" href="/my/trash/"><span class="trash-ico" aria-hidden="true"></span>${esc(t('Trash'))}${S.trashCount ? ` <small>${S.trashCount}</small>` : ''}</a>`;
     if (keep) root.querySelector('#viewer').replaceWith(viewer);
   }
 
@@ -322,12 +336,11 @@
     if (d.move) return patchCol(S.settings, { move: Number(d.move) });
     if ('showhidden' in d) { S.showHidden = !S.showHidden; return draw(); }
     if ('delcol' in d) {
-      if (!confirm(t('Delete this collection? Its recipes stay in your kitchen.'))) return;
       const id = S.settings || S.openCol;
-      return api('/api/collections/' + id, null, 'DELETE').then(() => {
+      return api('/api/collections/' + id, null, 'DELETE').then((res) => {
         S.cols = S.cols.filter((c) => c.id !== id);
         S.recipes.forEach((r) => { r.collections = (r.collections || []).filter((x) => x !== id); });
-        S.openCol = S.settings = null; draw();
+        S.openCol = S.settings = null; draw(); trashed(res);
       }).catch((x) => say(x.message));
     }
     if ('sort' in d) {
@@ -417,6 +430,7 @@
   }
 
   Promise.all([api('/api/me'), api('/api/stock'), api('/api/recipes'), api('/api/collections?lang=' + lang), api('/api/tags')])
-    .then(([me, stock, recipes, cols, tags]) => { Object.assign(S, { me, stock, recipes, cols, tags: tags.tags, tagMode: tags.mode }); draw(); })
+    .then(([me, stock, recipes, cols, tags]) => { Object.assign(S, { me, stock, recipes, cols, tags: tags.tags, tagMode: tags.mode }); draw();
+      api('/api/trash').then((tr) => { S.trashCount = tr.length; draw(); }).catch(() => {}); })
     .catch((e) => { root.innerHTML = `<p class="empty">${esc(e.message)}</p>`; });
 })();

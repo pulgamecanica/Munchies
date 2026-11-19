@@ -40,6 +40,7 @@ const memberCols = db.prepare('PRAGMA table_info(members)').all().map((c) => c.n
 if (!memberCols.includes('collections')) db.exec('ALTER TABLE members ADD COLUMN collections TEXT');
 if (!memberCols.includes('bonus')) db.exec('ALTER TABLE members ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0'); // extra AI uses granted by the admin, spent after the monthly allowance
 if (!memberCols.includes('created')) db.exec('ALTER TABLE members ADD COLUMN created INTEGER');
+if (!memberCols.includes('trash')) db.exec("ALTER TABLE members ADD COLUMN trash TEXT NOT NULL DEFAULT '[]'"); // deleted collections/recipes, restorable
 if (!memberCols.includes('prefs')) db.exec("ALTER TABLE members ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'"); // e.g. { palette: 'night' }
 // analytics: one counter per day and kind of action
 db.exec('CREATE TABLE IF NOT EXISTS events (day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind))');
@@ -97,6 +98,8 @@ const q = {
   setRecipes: db.prepare('UPDATE members SET recipes = ? WHERE uuid = ?'),
   getCols: db.prepare('SELECT collections FROM members WHERE uuid = ?'),
   getPrefs: db.prepare('SELECT prefs FROM members WHERE uuid = ?'),
+  getTrash: db.prepare('SELECT trash FROM members WHERE uuid = ?'),
+  setTrash: db.prepare('UPDATE members SET trash = ? WHERE uuid = ?'),
   setPrefs: db.prepare('UPDATE members SET prefs = ? WHERE uuid = ?'),
   setCols: db.prepare('UPDATE members SET collections = ? WHERE uuid = ?'),
   used: db.prepare('SELECT used FROM usage WHERE uuid = ? AND month = ?'),
@@ -161,6 +164,15 @@ function rateLimited(req) {
   let h = hits.get(ip);
   if (!h || h.reset < now) { if (hits.size > 50000) hits.clear(); h = { n: 0, reset: now + 60000 }; hits.set(ip, h); }
   return ++h.n > RATE;
+}
+
+/* ---------- trash ---------- */
+// ponytail: capped at 500 entries (oldest dropped); add an age-based purge if storage ever matters.
+function toTrash(uuid, entry) {
+  const id = newId('t');
+  const list = JSON.parse(q.getTrash.get(uuid)?.trash || '[]');
+  q.setTrash.run(JSON.stringify([{ id, deleted: Date.now(), ...entry }, ...list].slice(0, 500)), uuid);
+  return id;
 }
 
 /* ---------- members ---------- */
@@ -400,9 +412,36 @@ async function api(req, res, p) {
     return send(res, 200, cols);
   }
   if (colM && req.method === 'DELETE') {
-    q.setCols.run(JSON.stringify(cols.filter((c) => c.id !== colM[1])), m.uuid);
-    q.setRecipes.run(JSON.stringify(recipes.map((r) => ({ ...r, collections: (r.collections || []).filter((id) => id !== colM[1]) }))), m.uuid);
-    return send(res, 200, { ok: true });
+    // Into the trash with the list of recipes it held, so a restore puts everything back.
+    const c = cols.find((x) => x.id === colM[1]);
+    if (!c) throw fail(404, 'Not found');
+    const held = recipes.filter((r) => (r.collections || []).includes(c.id)).map((r) => r.id);
+    const tid = toTrash(m.uuid, { type: 'collection', item: c, recipes: held });
+    q.setCols.run(JSON.stringify(cols.filter((x) => x.id !== c.id)), m.uuid);
+    q.setRecipes.run(JSON.stringify(recipes.map((r) => ({ ...r, collections: (r.collections || []).filter((id) => id !== c.id) }))), m.uuid);
+    return send(res, 200, { ok: true, trash: tid });
+  }
+
+  // Trash: [{ id, type: 'collection' | 'recipe', item, recipes?, deleted }]. Kept until restored or deleted for good.
+  const trash = JSON.parse(q.getTrash.get(m.uuid)?.trash || '[]');
+  if (p === '/api/trash' && req.method === 'GET') return send(res, 200, trash);
+  if (p === '/api/trash' && req.method === 'DELETE') { q.setTrash.run('[]', m.uuid); return send(res, 200, { ok: true }); }
+  const trM = /^\/api\/trash\/(t[a-z0-9]+)(\/restore)?$/.exec(p);
+  if (trM) {
+    const entry = trash.find((x) => x.id === trM[1]);
+    if (!entry) throw fail(404, 'That item is no longer in the trash.');
+    q.setTrash.run(JSON.stringify(trash.filter((x) => x.id !== entry.id)), m.uuid);
+    if (req.method === 'DELETE' && !trM[2]) return send(res, 200, { ok: true });
+    if (req.method !== 'POST' || !trM[2]) throw fail(404, 'Not found');
+    if (entry.type === 'recipe') {
+      q.setRecipes.run(JSON.stringify([...recipes.filter((r) => r.id !== entry.item.id), { ...entry.item, collections: (entry.item.collections || []).filter((id) => cols.some((c) => c.id === id)) }]), m.uuid);
+    } else {
+      const c = cols.some((x) => x.id === entry.item.id) ? { ...entry.item, id: newId('c') } : entry.item;
+      q.setCols.run(JSON.stringify([...cols, c]), m.uuid);
+      const held = new Set(entry.recipes || []);
+      q.setRecipes.run(JSON.stringify(recipes.map((r) => (held.has(r.id) ? { ...r, collections: [...new Set([...(r.collections || []), c.id])] } : r))), m.uuid);
+    }
+    return send(res, 200, { ok: true, type: entry.type });
   }
 
   if (p === '/api/recipes' && req.method === 'GET') return send(res, 200, recipes);
@@ -416,8 +455,11 @@ async function api(req, res, p) {
   }
   if (p.startsWith('/api/recipes/') && req.method === 'DELETE') {
     const id = decodeURIComponent(p.split('/').pop());
-    q.setRecipes.run(JSON.stringify(recipes.filter((r) => r.id !== id)), m.uuid);
-    return send(res, 200, { ok: true });
+    const r = recipes.find((x) => x.id === id);
+    if (!r) throw fail(404, 'Not found');
+    const tid = toTrash(m.uuid, { type: 'recipe', item: r });
+    q.setRecipes.run(JSON.stringify(recipes.filter((x) => x.id !== id)), m.uuid);
+    return send(res, 200, { ok: true, trash: tid });
   }
 
   if (req.method !== 'POST') throw fail(404, 'Not found');

@@ -76,6 +76,8 @@ Each member's space: make tables, collections, stock, cook from stock. Rename it
 - **Collection settings** (⚙ on each collection): name, layout (3D stack, grid or list), cover recipe (front of the stack), hide from the kitchen, move left/right, delete.
 - **Collections:** every account starts with three, each pre-filled with default recipes (Favourites, Want to try, Weeknight dinners, named in the member's language). Members add, rename and delete their own. Any recipe table has an **Add to collection…** picker; a recipe can sit in several. In the kitchen each collection is a 3D stack: pass through with the arrows, a swipe or the arrow keys; click the front card to open it, a back card to bring it forward; **Open** fans the whole collection out.
 - **Stock tags** are global and admin-only: names in 6 languages plus an SVG icon (14 built in; paste any SVG, e.g. from SVGRepo). The admin picks the AI mode: *off*, *assign existing tags*, or *assign and create* (the AI names the new tag in all languages and draws its icon). Icons render as CSS masks in the theme colour, so pasted SVG can't run code; the server also rejects scripts, event handlers and links in icons.
+- **Trash:** deleting a collection or recipe moves it to the trash (a toast offers Undo). The trash page (`/my/trash/`, linked at the very bottom of the kitchen) restores items, a collection together with its recipes, or deletes them forever.
+- **Wording:** members only ever see "recipe"; "recipe table" is the format's name in the code, never in the UI.
 - **Bonus AI uses:** the admin can set a member's usage for the month or grant bonus uses, which are spent after the monthly allowance and carry over.
 
 ## Publishing a recipe table
@@ -98,12 +100,13 @@ Cookbook photos are OCR'd first. If the page has enough text (80+ characters), C
 | `GET/PUT /api/stock` | kitchen stock |
 | `GET/POST /api/recipes`, `DELETE /api/recipes/:id` | recipe box |
 | `POST /api/ocr` `{image}` | text from a photo (free) |
-| `POST /api/convert` `{url\|text\|image}` | make a table (AI, metered) |
+| `POST /api/convert` `{url\|text\|image}` | create a recipe from a link, text or photo (AI, metered) |
 | `POST /api/generate` `{ingredients, notes}` | recipe from stock (AI, metered) |
 | `POST /api/recognize` `{image}` | ingredients from a photo (AI, metered) |
 | `POST /api/translate` `{recipe, lang}` | translate a recipe (AI, metered) |
 | `GET/POST /api/collections`, `PATCH/DELETE /api/collections/:id` | the member's collections (3 starters on first visit) |
 | `GET /api/tags` | stock tags + the AI tagging mode |
+| `GET/DELETE /api/trash`, `POST /api/trash/:id/restore`, `DELETE /api/trash/:id` | the trash: list, empty, restore, delete forever |
 | `POST /api/stock/sort` | AI files untagged stock under tags (metered) |
 | `/api/admin` | **admin center** (Bearer `ADMIN_TOKEN`): analytics, edit usage and bonus AI uses per member, stock tags + icons, AI tagging mode |
 | `GET /api/health` | healthcheck |
