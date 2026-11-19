@@ -1,0 +1,12 @@
+# Copied into Ghost's content/settings at boot. Edits in Ghost admin get replaced on redeploy: change this file instead.
+routes:
+  /my/: my
+
+collections:
+  /:
+    permalink: /{slug}/
+    template: index
+
+taxonomies:
+  tag: /tag/{slug}/
+  author: /author/{slug}/

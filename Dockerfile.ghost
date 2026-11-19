@@ -1,0 +1,7 @@
+# Ghost with the Recepees theme + routes baked in. Re-copied on every boot so redeploys ship theme updates
+# (the content volume would otherwise keep the first version forever).
+FROM ghost:6-alpine
+COPY theme /opt/recepees/theme
+COPY ghost/routes.yaml /opt/recepees/routes.yaml
+ENTRYPOINT ["sh", "-c", "mkdir -p \"$GHOST_CONTENT/themes\" \"$GHOST_CONTENT/settings\" && rm -rf \"$GHOST_CONTENT/themes/recepees\" && cp -r /opt/recepees/theme \"$GHOST_CONTENT/themes/recepees\" && cp /opt/recepees/routes.yaml \"$GHOST_CONTENT/settings/routes.yaml\" && exec docker-entrypoint.sh \"$@\"", "--"]
+CMD ["node", "current/index.js"]

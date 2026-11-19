@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="{{@site.locale}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{meta_title}}</title>
+  <link rel="stylesheet" href="{{asset "css/screen.css"}}">
+  {{ghost_head}}
+</head>
+<body class="{{body_class}}"{{#if @member}} data-member="{{#if @member.paid}}paid{{else}}free{{/if}}"{{/if}}>
+  <header class="top">
+    <a class="brand" href="{{@site.url}}">{{#if @site.logo}}<img src="{{@site.logo}}" alt="">{{else}}<span class="logo">🍳</span>{{/if}}<b>{{@site.title}}</b></a>
+    <nav>
+      <a href="{{@site.url}}/">Library</a>
+      <a href="{{@site.url}}/my/">Recipe box</a>
+      {{#if @member}}
+        {{#unless @member.paid}}<a href="#" data-portal="account/plans" class="pro">Get Pro</a>{{/unless}}
+        <a href="#" data-portal="account">Account</a>
+      {{else}}
+        <a href="#" data-portal="signin">Sign in</a>
+        <a href="#" data-portal="signup" class="btn primary">Create account</a>
+      {{/if}}
+    </nav>
+  </header>
+  <main class="wrap">
+    {{{body}}}
+  </main>
+  <footer class="foot">
+    <span>{{@site.title}} &middot; recipe tables read left to right, each column combines what's behind it.</span>
+    {{navigation type="secondary"}}
+  </footer>
+  <script src="{{asset "js/recipe-table.js"}}"></script>
+  {{ghost_foot}}
+</body>
+</html>

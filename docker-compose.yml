@@ -1,0 +1,39 @@
+# Dev: `bun run dev` -> http://localhost:${PORT} , Ghost admin at /ghost , emails at http://localhost:${MAIL_UI_PORT}
+# Every setting comes from .env (see .env.example); the values after :- are only fallbacks.
+services:
+  api:
+    image: node:24-alpine
+    working_dir: /app
+    command: node --watch server.js
+    ports: ["${PORT:-3000}:3000"]
+    env_file: [{ path: .env, required: false }]
+    environment:
+      PORT: 3000   # inside the container; host port is ${PORT}
+      GHOST_URL: http://ghost:2368
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev}
+    volumes: [".:/app"]
+    depends_on: [ghost]
+
+  ghost:
+    image: ghost:${GHOST_VERSION:-6}-alpine
+    environment:
+      url: ${PUBLIC_URL:-http://localhost:${PORT:-3000}}
+      NODE_ENV: development
+      database__client: sqlite3
+      database__connection__filename: /var/lib/ghost/content/data/ghost.db
+      mail__transport: SMTP
+      mail__from: ${MAIL_FROM:-Recepees <noreply@localhost>}
+      mail__options__host: ${SMTP_HOST:-mailpit}
+      mail__options__port: ${SMTP_PORT:-1025}
+      mail__options__secure: ${SMTP_SECURE:-false}
+    volumes:
+      - ghost-content:/var/lib/ghost/content
+      - ./theme:/var/lib/ghost/content/themes/recepees      # live theme edits
+      - ./ghost/routes.yaml:/var/lib/ghost/content/settings/routes.yaml
+
+  mailpit:
+    image: axllent/mailpit
+    ports: ["${MAIL_UI_PORT:-8026}:8025"]
+
+volumes:
+  ghost-content:

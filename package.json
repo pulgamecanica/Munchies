@@ -1,17 +1,14 @@
 {
   "name": "recepees",
-  "version": "1.0.0",
-  "description": "Local recipe app with stock tracking and AI recipe generation",
-  "main": "server.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Ghost theme + API gateway for recipe tables, a member recipe box and AI usage limits",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "build": "node build.mjs"
+    "dev": "docker compose up",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f",
+    "check": "npx -y gscan theme",
+    "zip": "cd theme && zip -r ../recepees-theme.zip . -x '.*'"
   },
-  "license": "ISC",
-  "dependencies": {
-    "esbuild": "^0.28.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
-  }
+  "license": "ISC"
 }

@@ -1,0 +1,81 @@
+[
+  {
+    "id": "mexican-chicken-bowls",
+    "title": "Mexican Chicken & Grain Bowls",
+    "emoji": "🌮",
+    "description": "Spiced chicken strips over warm grain salad with fresh tomato and crisp lettuce.",
+    "servings": 2,
+    "time": "25 min",
+    "tags": ["quick", "tgtg haul", "bowl"],
+    "steps": [
+      { "text": "Dice the tomatoes and tear the lettuce into bite-size pieces. Set aside.",
+        "uses": [ { "name": "tomatoes", "amount": 2, "unit": "pcs" }, { "name": "oak-leaf lettuce", "amount": 100, "unit": "g" } ] },
+      { "text": "Heat the oil in a pan over medium-high heat. Cook the chicken strips for 6–8 minutes, turning, until browned and cooked through.",
+        "uses": [ { "name": "chicken strips", "amount": 250, "unit": "g" }, { "name": "oil", "amount": 1, "unit": "tbsp" } ] },
+      { "text": "Warm the grain salad in a small pan or the microwave for 1–2 minutes and fluff it with a fork.",
+        "uses": [ { "name": "grain salad", "amount": 1, "unit": "tub" } ] },
+      { "text": "Build the bowls: grain base, chicken, tomato, lettuce. Finish with a squeeze of lime and a pinch of cumin or paprika.",
+        "uses": [ { "name": "lime", "amount": 1, "unit": "pcs", "optional": true }, { "name": "cumin", "amount": 1, "unit": "tsp", "optional": true } ] }
+    ],
+    "notes": "Eat within a day: the chicken and lettuce are on a short date."
+  },
+  {
+    "id": "seared-salmon-cod",
+    "title": "Pan-Seared Salmon & Cod with Tomato Salad",
+    "emoji": "🐟",
+    "description": "Two fish, one pan, ten minutes. Butter-basted and served on a lemony salad.",
+    "servings": 2,
+    "time": "20 min",
+    "tags": ["fish", "quick", "tgtg haul"],
+    "steps": [
+      { "text": "Pat the fish dry with paper towel and season both sides with salt and pepper.",
+        "uses": [ { "name": "salmon", "amount": 150, "unit": "g" }, { "name": "cod", "amount": 150, "unit": "g" }, { "name": "salt", "amount": 1, "unit": "pinch" }, { "name": "pepper", "amount": 1, "unit": "pinch" } ] },
+      { "text": "Melt the butter in a non-stick pan over medium-high heat. Cook the salmon skin-side down 4 minutes, flip and cook 2–3 more. Cook the cod 3 minutes per side.",
+        "uses": [ { "name": "butter", "amount": 1, "unit": "tbsp" } ] },
+      { "text": "While the fish cooks, slice the tomatoes and toss with the lettuce, olive oil, lemon juice and a pinch of salt.",
+        "uses": [ { "name": "tomatoes", "amount": 2, "unit": "pcs" }, { "name": "oak-leaf lettuce", "amount": 80, "unit": "g" }, { "name": "olive oil", "amount": 1, "unit": "tbsp" }, { "name": "lemon", "amount": 0.5, "unit": "pcs", "optional": true } ] },
+      { "text": "Plate the fish over the salad and spoon the pan butter over the top.", "uses": [] }
+    ],
+    "notes": "Cod is more delicate than salmon: flip it once, gently."
+  },
+  {
+    "id": "steak-tomato-salad",
+    "title": "Butter-Basted Steak with Tomato & Lettuce",
+    "emoji": "🥩",
+    "description": "A fast pan-seared steak with a simple salad. Cook it tomorrow or freeze it tonight.",
+    "servings": 2,
+    "time": "20 min",
+    "tags": ["beef", "quick", "tgtg haul"],
+    "steps": [
+      { "text": "Take the steak out of the fridge 20 minutes ahead. Pat dry and season generously with salt and pepper.",
+        "uses": [ { "name": "beef steak", "amount": 1, "unit": "pcs" }, { "name": "salt", "amount": 1, "unit": "tsp" }, { "name": "pepper", "amount": 1, "unit": "pinch" } ] },
+      { "text": "Sear in a very hot pan with the oil for 2–3 minutes per side for medium-rare. Add the butter in the last minute and baste.",
+        "uses": [ { "name": "oil", "amount": 1, "unit": "tbsp" }, { "name": "butter", "amount": 1, "unit": "tbsp" } ] },
+      { "text": "Rest the steak 5 minutes under foil, then slice against the grain.", "uses": [] },
+      { "text": "Slice the tomatoes, toss with the lettuce, a little olive oil and salt, and serve with the steak.",
+        "uses": [ { "name": "tomatoes", "amount": 2, "unit": "pcs" }, { "name": "oak-leaf lettuce", "amount": 60, "unit": "g" }, { "name": "olive oil", "amount": 1, "unit": "tbsp" } ] }
+    ],
+    "notes": "Thin cuts cook fast; use the 2–3 minute guide and check by touch."
+  },
+  {
+    "id": "banana-croissant-pudding",
+    "title": "Banana Croissant Bread Pudding",
+    "emoji": "🍌",
+    "description": "Uses up the extra croissants and the very ripe bananas in one warm dessert.",
+    "servings": 4,
+    "time": "50 min",
+    "tags": ["dessert", "uses ripe bananas", "tgtg haul"],
+    "steps": [
+      { "text": "Preheat the oven to 180°C (350°F) and butter a baking dish.",
+        "uses": [ { "name": "butter", "amount": 10, "unit": "g" } ] },
+      { "text": "Tear the croissants into chunks and spread them in the dish.",
+        "uses": [ { "name": "croissants", "amount": 6, "unit": "pcs" } ] },
+      { "text": "Slice the ripe bananas and tuck the slices between the croissant pieces.",
+        "uses": [ { "name": "bananas", "amount": 3, "unit": "pcs" } ] },
+      { "text": "Whisk the eggs, milk, sugar and vanilla (add a little grated ginger if you like). Pour over, press down gently and let it soak 10 minutes.",
+        "uses": [ { "name": "eggs", "amount": 3, "unit": "pcs" }, { "name": "milk", "amount": 300, "unit": "ml" }, { "name": "sugar", "amount": 3, "unit": "tbsp" }, { "name": "vanilla", "amount": 1, "unit": "tsp", "optional": true }, { "name": "ginger", "amount": 1, "unit": "tsp", "optional": true } ] },
+      { "text": "Bake for about 30 minutes, until golden on top and just set in the middle. Serve warm.", "uses": [] }
+    ],
+    "notes": "Croissants freeze well: freeze the rest of the bag tonight."
+  }
+]

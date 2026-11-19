@@ -1,0 +1,14 @@
+{{!< default}}
+{{#if @member}}
+  <div id="box" aria-live="polite"><p class="empty">Loading your recipe box…</p></div>
+  <script src="{{asset "js/box.js"}}" defer></script>
+{{else}}
+  <section class="intro">
+    <h1>Your recipe box</h1>
+    <p>Turn any recipe (a link, pasted text or a photo of a cookbook page) into a recipe table, keep your kitchen stock, and cook from what you have.</p>
+    <div class="row">
+      <a href="#" data-portal="signup" class="btn primary">Create a free account</a>
+      <a href="#" data-portal="signin" class="btn">Sign in</a>
+    </div>
+  </section>
+{{/if}}

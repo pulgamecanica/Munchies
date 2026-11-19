@@ -1,0 +1,29 @@
+{{!< default}}
+{{#is "home"}}
+<section class="intro">
+  <h1>Less scrolling, more cooking.</h1>
+  <p>{{@site.description}}</p>
+  <div class="row">
+    <a class="btn primary" href="{{@site.url}}/my/">Make a table from any recipe →</a>
+  </div>
+</section>
+{{/is}}
+{{#is "tag"}}{{#tag}}<section class="intro"><h1>{{name}}</h1>{{#if description}}<p>{{description}}</p>{{/if}}</section>{{/tag}}{{/is}}
+
+{{#get "tags" limit="40" filter="visibility:public" order="count.posts desc"}}
+  {{#if tags}}<nav class="chips" aria-label="Categories">{{#foreach tags}}<a href="{{url}}">{{name}}</a>{{/foreach}}</nav>{{/if}}
+{{/get}}
+
+<div class="grid">
+  {{#foreach posts}}
+  <a class="card post-card" href="{{url}}">
+    {{#if feature_image}}<img src="{{img_url feature_image size="s"}}" srcset="{{img_url feature_image size="s"}} 400w, {{img_url feature_image size="m"}} 800w" sizes="(max-width: 600px) 100vw, 320px" alt="{{title}}" loading="lazy">{{/if}}
+    <h3>{{title}}</h3>
+    <p>{{excerpt words="22"}}</p>
+    <div class="tags">{{#foreach tags}}<span>{{name}}</span>{{/foreach}}{{#unless access}}<span class="lock">Pro</span>{{/unless}}</div>
+  </a>
+  {{else}}
+  <p class="empty">No recipes yet. Write a post in Ghost admin and paste a recipe table block into an HTML card.</p>
+  {{/foreach}}
+</div>
+{{pagination}}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recepees Admin</title>
+<style>
+  :root { --bg:#faf5ec; --card:#fffdf8; --ink:#2a2118; --muted:#8a7b6a; --line:#eadfce; --accent:#d9482b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1c1814; --card:#26201b; --ink:#f3ebe0; --muted:#a8998a; --line:#3a3129; --accent:#ef6a4c; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px; }
+  h1 { font-family:Georgia, serif; margin:0 0 4px; }
+  p { color:var(--muted); margin:0 0 16px; }
+  form, .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:16px; }
+  input { padding:9px 12px; border:1px solid var(--line); border-radius:9px; background:var(--bg); color:var(--ink); width:min(360px,100%); }
+  button { padding:9px 14px; border:0; border-radius:9px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }
+  .scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; font-size:13px; }
+  td.n { font-variant-numeric:tabular-nums; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Recepees admin center</h1>
+  <p>AI usage per member this month. Members, tiers, Stripe and posts live in <a href="/ghost/">Ghost admin</a>.</p>
+  <form id="f"><input id="t" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" aria-label="Admin token"> <button>Load</button></form>
+  <div id="out"></div>
+</main>
+<script>
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';');
+  try { $('#t').value = sessionStorage.getItem('rt-admin') || ''; } catch {}
+  const call = (path, method = 'GET') => fetch(path, { method, headers: { authorization: 'Bearer ' + $('#t').value } })
+    .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; });
+  async function load() {
+    try { sessionStorage.setItem('rt-admin', $('#t').value); } catch {}
+    try {
+      const d = await call('/api/admin/members');
+      const rows = d.members.sort((a, b) => (b.usage[d.month] || 0) - (a.usage[d.month] || 0)).map((m) => `<tr>
+        <td>${esc(m.email)}</td><td class="n">${m.usage[d.month] || 0}</td><td class="n">${m.recipes}</td><td class="n">${m.stock}</td>
+        <td><button data-reset="${esc(m.uuid)}">Reset usage</button></td></tr>`).join('');
+      $('#out').innerHTML = `<div class="card"><b>${d.members.length}</b> members · limits: free ${d.limits.free}, paid ${d.limits.paid} AI calls / month</div>
+        <div class="card scroll"><table><thead><tr><th>Member</th><th>AI used (${d.month})</th><th>Recipes</th><th>Stock</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5">No members have used the box yet.</td></tr>'}</tbody></table></div>`;
+    } catch (e) { $('#out').innerHTML = `<div class="card">${esc(e.message)}</div>`; }
+  }
+  $('#f').onsubmit = (e) => { e.preventDefault(); load(); };
+  $('#out').onclick = async (e) => { const id = e.target.dataset.reset; if (id) { await call(`/api/admin/members/${id}/reset`, 'POST'); load(); } };
+  if ($('#t').value) load();
+</script>
+</body>
+</html>
