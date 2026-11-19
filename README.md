@@ -15,8 +15,8 @@ No npm dependencies anywhere: Node 24 built-ins, plain browser JS, Ghost and Tes
 | **Ingredient explorer** | **Print** in every style |
 | ![Colour themes](docs/screenshots/themes.png) | ![Admin center](docs/screenshots/admin.png) |
 | **Colour themes**: Enamel, Pastel, Summer, Night | **Admin center** |
-| ![On a phone](docs/screenshots/phone.png) | |
-| **On a phone** | |
+| ![On a phone](docs/screenshots/phone.png) | ![How to read a recipe](docs/screenshots/how-to-read.png) |
+| **On a phone** | **How to read a recipe**: the animated explainer |
 
 ## Features
 **For members**
@@ -26,6 +26,7 @@ No npm dependencies anywhere: Node 24 built-ins, plain browser JS, Ghost and Tes
 - **Collections**: three pre-filled starters plus the built-in **All**; 3D stacks you can flip through, or grid / list layouts; covers, hiding, ordering; an overview to manage them all.
 - **Stock**: add by photo, by hand, or tap tiles in the **ingredient explorer**; shelves by category with icons; **Sort my stock with AI** (limited per plan).
 - **Trash**: deleted collections, recipes and ingredients are restorable (`/my/trash/`, linked at the bottom of the kitchen); every delete has Undo.
+- **How to read a recipe** (`/how-to-read/`): an animated, captioned, narrated line-art explainer with a full player. Storyboard and art direction: [`docs/how-to-read/STORYBOARD.md`](docs/how-to-read/STORYBOARD.md).
 - **6 languages** (English, Español, Français, Português, Italiano, Deutsch) and **4 colour themes** (Enamel, Pastel, Summer, Night), both remembered per visitor and per member.
 
 **For the site owner**
@@ -55,6 +56,7 @@ One origin for everything, so the Ghost member cookie reaches the API, which ask
 | `admin.html` | admin center |
 | `theme/` | the Ghost theme (`*.hbs`, `assets/css/screen.css`, `assets/js/*.js`) |
 | `ghost/routes.yaml` | `/my/` (kitchen) and `/my/trash/` |
+| `theme/page-how-to-read.hbs`, `theme/assets/how-to-read/`, `theme/partials/how-to-read-art.hbs` | the explainer page: template, storyboard + voice-over, line art |
 | `ocr/` | OCR microservice |
 | `default-tags.json`, `seed-recipes.json` | built-in stock tags and starter recipes |
 
@@ -150,5 +152,6 @@ Images are sent as `data:image/...;base64,` URLs. AI endpoints take an optional 
 3. Give the **api** service your domain (container port 3000). Nothing else needs a public port.
 4. Environment variables: `PUBLIC_URL` (the same domain, with `https://`), `MYSQL_PASSWORD`, `ADMIN_TOKEN` (long and random), `ANTHROPIC_API_KEY`, `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`; optionally the limits above.
 5. Deploy, open `/ghost` to create the owner account, then **Settings → Design → activate "recepees"** once. Connect Stripe under **Settings → Membership** for paid plans.
+6. Create a page with the slug `how-to-read` for the explainer (title and intro are yours; the player is built in).
 
 `Dockerfile.ghost` bakes the theme and `routes.yaml` into the Ghost image and re-copies them on every boot, so each redeploy ships theme changes. Data lives in the `api-data` (SQLite), `ghost-content` and `db` volumes: back those up.

@@ -1,0 +1,41 @@
+{{!< default}}
+{{!-- Used automatically for the Ghost page with the slug "how-to-read". Title and intro come from the editor; the player is built in. --}}
+{{#post}}
+<article class="howto">
+  <header class="post-head">
+    <a class="back" href="{{@site.url}}/" data-t>← Library</a>
+    <h1 class="howto-title">{{title}}</h1>
+    {{#if custom_excerpt}}<p class="lede">{{custom_excerpt}}</p>{{/if}}
+  </header>
+
+  <figure class="ht-player" id="howto" data-storyboard="{{asset "how-to-read/storyboard.json"}}" tabindex="-1">
+    <div class="ht-stage">
+      <div class="ht-art" data-pose="idle">{{> "how-to-read-art"}}</div>
+      <div class="ht-table" id="ht-table" aria-hidden="true"></div>
+    </div>
+    <p class="ht-caption" aria-live="polite"></p>
+    <div class="ht-bar">
+      <div class="ht-seek">
+        <input type="range" class="ht-range" min="0" max="1000" value="0" step="1" data-seek aria-label="Seek">
+        <div class="ht-chapters" aria-hidden="true"></div>
+      </div>
+      <div class="ht-controls">
+        <button type="button" class="ht-btn" data-ht="restart" aria-label="Restart"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/></svg></button>
+        <button type="button" class="ht-btn" data-ht="prev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M18 6 9 12l9 6zM6 6v12"/></svg></button>
+        <button type="button" class="ht-btn ht-play" data-ht="play" aria-label="Play"><svg class="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M7 4h3v16H7zM14 4h3v16h-3z"/></svg></button>
+        <button type="button" class="ht-btn" data-ht="next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="m6 6 9 6-9 6zM18 6v12"/></svg></button>
+        <span class="ht-time" aria-live="off">0:00 / 0:00</span>
+        <span class="ht-spacer"></span>
+        <button type="button" class="ht-btn ht-text" data-ht="speed" aria-label="Speed">1×</button>
+        <button type="button" class="ht-btn ht-text" data-ht="cc" aria-pressed="true" aria-label="Captions">CC</button>
+        <button type="button" class="ht-btn" data-ht="sound" aria-pressed="true" aria-label="Sound"><svg class="i-on" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg><svg class="i-off" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM17 9l5 6M22 9l-5 6"/></svg></button>
+      </div>
+    </div>
+  </figure>
+
+  <div class="gh-content">
+    {{content}}
+  </div>
+</article>
+{{/post}}
+<script src="{{asset "js/howto.js"}}" defer></script>

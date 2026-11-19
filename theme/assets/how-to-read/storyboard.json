@@ -1,0 +1,298 @@
+{
+  "_doc": "Drives the 'How to read a recipe' player. Times are in seconds. pose = arm animation (see art partial), props = drawing ids shown in the scene, highlight = recipe rows/steps lit up (seq: reveal one by one across the scene), done = steps ticked off. Edit freely; see docs/how-to-read/STORYBOARD.md.",
+  "duration": 62,
+  "audio": {
+    "en": "voice-en.mp3",
+    "es": "voice-es.mp3",
+    "fr": "voice-fr.mp3",
+    "pt": "voice-pt.mp3",
+    "it": "voice-it.mp3",
+    "de": "voice-de.mp3"
+  },
+  "recipe": {
+    "title": "Sunday pancakes",
+    "emoji": "🥞",
+    "servings": 4,
+    "time": "25 min",
+    "lang": "en",
+    "steps": [
+      {
+        "text": "Whisk",
+        "after": [],
+        "uses": [
+          {
+            "name": "flour",
+            "amount": 200,
+            "unit": "g"
+          },
+          {
+            "name": "sugar",
+            "amount": 2,
+            "unit": "tbsp"
+          },
+          {
+            "name": "baking powder",
+            "amount": 2,
+            "unit": "tsp"
+          },
+          {
+            "name": "salt",
+            "amount": 1,
+            "unit": "pinch"
+          }
+        ]
+      },
+      {
+        "text": "Whisk",
+        "after": [],
+        "uses": [
+          {
+            "name": "milk",
+            "amount": 300,
+            "unit": "ml"
+          },
+          {
+            "name": "eggs",
+            "amount": 2,
+            "unit": "pcs"
+          },
+          {
+            "name": "melted butter",
+            "amount": 30,
+            "unit": "g"
+          }
+        ]
+      },
+      {
+        "text": "Fold together",
+        "after": [
+          0,
+          1
+        ],
+        "uses": []
+      },
+      {
+        "text": "Cook 2–3 min per side",
+        "after": [
+          2
+        ],
+        "uses": [
+          {
+            "name": "butter, for the pan",
+            "amount": 10,
+            "unit": "g"
+          }
+        ]
+      }
+    ]
+  },
+  "scenes": [
+    {
+      "id": "intro",
+      "start": 0,
+      "end": 7,
+      "pose": "idle",
+      "props": [],
+      "highlight": {
+        "all": true
+      },
+      "caption": {
+        "en": "This is a recipe, drawn as a map. You read it from left to right, like a sentence.",
+        "es": "Esto es una receta dibujada como un mapa. Se lee de izquierda a derecha, como una frase.",
+        "fr": "Voici une recette dessinée comme une carte. On la lit de gauche à droite, comme une phrase.",
+        "pt": "Isto é uma receita desenhada como um mapa. Lê-se da esquerda para a direita, como uma frase.",
+        "it": "Questa è una ricetta disegnata come una mappa. Si legge da sinistra a destra, come una frase.",
+        "de": "Das ist ein Rezept, gezeichnet wie eine Landkarte. Man liest es von links nach rechts, wie einen Satz."
+      }
+    },
+    {
+      "id": "ingredients",
+      "start": 7,
+      "end": 16,
+      "pose": "gather",
+      "props": [
+        "flour",
+        "sugar",
+        "milk",
+        "egg",
+        "butter"
+      ],
+      "highlight": {
+        "rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "seq": "rows"
+      },
+      "caption": {
+        "en": "Down the left: every ingredient, in the order you will use it. It is your shopping list too.",
+        "es": "A la izquierda, todos los ingredientes en el orden en que los usarás. También es tu lista de la compra.",
+        "fr": "À gauche : tous les ingrédients, dans l’ordre où vous les utiliserez. C’est aussi votre liste de courses.",
+        "pt": "À esquerda: todos os ingredientes, pela ordem em que os vai usar. É também a sua lista de compras.",
+        "it": "A sinistra: tutti gli ingredienti, nell’ordine in cui li userai. È anche la tua lista della spesa.",
+        "de": "Links: alle Zutaten in der Reihenfolge, in der du sie brauchst. Gleichzeitig deine Einkaufsliste."
+      }
+    },
+    {
+      "id": "dry",
+      "start": 16,
+      "end": 26,
+      "pose": "whisk",
+      "props": [
+        "bowl-a",
+        "whisk",
+        "flour",
+        "sugar"
+      ],
+      "highlight": {
+        "rows": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "steps": [
+          0
+        ]
+      },
+      "caption": {
+        "en": "A step sits right next to what it uses. This Whisk covers the flour, sugar, baking powder and salt: whisk exactly those together.",
+        "es": "Cada paso está junto a lo que usa. Este «Batir» abarca la harina, el azúcar, la levadura y la sal: bate justo eso.",
+        "fr": "Chaque étape se trouve juste à côté de ce qu’elle utilise. Ce « Fouetter » couvre la farine, le sucre, la levure et le sel : fouettez exactement ceux-là.",
+        "pt": "Cada passo fica ao lado do que usa. Este «Bater» abrange a farinha, o açúcar, o fermento e o sal: bata exatamente isso.",
+        "it": "Ogni passaggio sta accanto a ciò che usa. Questo «Sbattere» copre farina, zucchero, lievito e sale: sbatti proprio quelli.",
+        "de": "Jeder Schritt steht direkt neben dem, was er braucht. Dieses „Verquirlen“ umfasst Mehl, Zucker, Backpulver und Salz: genau die verquirlst du."
+      }
+    },
+    {
+      "id": "wet",
+      "start": 26,
+      "end": 35,
+      "pose": "crack",
+      "props": [
+        "bowl-a",
+        "bowl-b",
+        "egg",
+        "milk"
+      ],
+      "highlight": {
+        "rows": [
+          4,
+          5,
+          6
+        ],
+        "steps": [
+          1
+        ]
+      },
+      "caption": {
+        "en": "Steps in the same column can happen in any order. In a second bowl, whisk the milk, eggs and melted butter.",
+        "es": "Los pasos de una misma columna pueden hacerse en cualquier orden. En otro bol, bate la leche, los huevos y la mantequilla derretida.",
+        "fr": "Les étapes d’une même colonne peuvent se faire dans n’importe quel ordre. Dans un second bol, fouettez le lait, les œufs et le beurre fondu.",
+        "pt": "Os passos da mesma coluna podem ser feitos por qualquer ordem. Noutra taça, bata o leite, os ovos e a manteiga derretida.",
+        "it": "I passaggi nella stessa colonna si possono fare in qualsiasi ordine. In una seconda ciotola, sbatti latte, uova e burro fuso.",
+        "de": "Schritte in derselben Spalte gehen in beliebiger Reihenfolge. In einer zweiten Schüssel Milch, Eier und geschmolzene Butter verquirlen."
+      }
+    },
+    {
+      "id": "fold",
+      "start": 35,
+      "end": 44,
+      "pose": "pour",
+      "props": [
+        "bowl-a",
+        "bowl-b"
+      ],
+      "highlight": {
+        "rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "steps": [
+          0,
+          1,
+          2
+        ]
+      },
+      "caption": {
+        "en": "Each new column combines everything to its left. Fold the two bowls together.",
+        "es": "Cada nueva columna combina todo lo que tiene a su izquierda. Mezcla los dos boles con movimientos envolventes.",
+        "fr": "Chaque nouvelle colonne réunit tout ce qui est à sa gauche. Incorporez les deux bols l’un dans l’autre.",
+        "pt": "Cada nova coluna junta tudo o que está à sua esquerda. Envolva as duas taças.",
+        "it": "Ogni nuova colonna unisce tutto ciò che ha a sinistra. Incorpora le due ciotole.",
+        "de": "Jede neue Spalte verbindet alles links davon. Heb die beiden Schüsseln unter."
+      }
+    },
+    {
+      "id": "dish",
+      "start": 44,
+      "end": 54,
+      "pose": "flip",
+      "props": [
+        "pan",
+        "pancake"
+      ],
+      "highlight": {
+        "rows": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "steps": [
+          3
+        ]
+      },
+      "caption": {
+        "en": "The last column is the dish: everything has come together. Cook each pancake two to three minutes per side.",
+        "es": "La última columna es el plato: todo se ha unido. Cocina cada tortita dos o tres minutos por lado.",
+        "fr": "La dernière colonne, c’est le plat : tout s’est rejoint. Faites cuire chaque pancake deux à trois minutes par face.",
+        "pt": "A última coluna é o prato: tudo se juntou. Cozinhe cada panqueca dois a três minutos de cada lado.",
+        "it": "L’ultima colonna è il piatto: tutto si è riunito. Cuoci ogni pancake due o tre minuti per lato.",
+        "de": "Die letzte Spalte ist das Gericht: alles ist zusammengekommen. Jeden Pfannkuchen zwei bis drei Minuten pro Seite backen."
+      }
+    },
+    {
+      "id": "done",
+      "start": 54,
+      "end": 62,
+      "pose": "serve",
+      "props": [
+        "plate"
+      ],
+      "highlight": {
+        "all": true
+      },
+      "done": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "seq": "done",
+      "caption": {
+        "en": "Tap each step as you finish it, and change the servings at the top. That is all: now you can read any recipe here.",
+        "es": "Toca cada paso al terminarlo y cambia las raciones arriba. Eso es todo: ya sabes leer cualquier receta.",
+        "fr": "Touchez chaque étape une fois terminée et changez les portions en haut. C’est tout : vous savez lire toutes les recettes.",
+        "pt": "Toque em cada passo quando o terminar e mude as porções no topo. É só isso: já sabe ler qualquer receita.",
+        "it": "Tocca ogni passaggio quando lo finisci e cambia le porzioni in alto. Tutto qui: ora sai leggere ogni ricetta.",
+        "de": "Tippe jeden Schritt an, wenn er erledigt ist, und ändere oben die Portionen. Das war’s: jetzt kannst du jedes Rezept hier lesen."
+      }
+    }
+  ]
+}

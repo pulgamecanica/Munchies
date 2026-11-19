@@ -74,7 +74,7 @@
       const srcName = (recipe.source && recipe.source.name) || (srcUrl && srcUrl.split('/')[2]);
       const cls = (u) => (!stock || isStaple(u.name) || findStock(stock, u.name) ? '' : u.optional ? 'opt' : 'miss');
       const ingCells = rows.map(({ u, n }, k) =>
-        `<div class="rt-ing ${cls(u)}" style="grid-row:${k + 2};grid-column:1/${n.d + 1}">` +
+        `<div class="rt-ing ${cls(u)}" data-row="${k}" style="grid-row:${k + 2};grid-column:1/${n.d + 1}">` +
         `<b>${esc(amount(u, f))}</b> ${esc(u.name)}${u.optional ? ` <small>${t('optional')}</small>` : ''}${cls(u) === 'miss' ? ` <small class="buy">· ${t('to buy')}</small>` : ''}</div>`).join('');
       // Convergence as colour: steps deepen toward the final column; the last step is the dish.
       const depth = (n) => Math.round(12 + 76 * (n.d - 1) / Math.max(1, cols - 1));
@@ -108,7 +108,7 @@
         ${prep.length ? `<ul class="rt-prep">${prep.map((n) => `<li>${esc(n.s.text)}</li>`).join('')}</ul>` : ''}
         <div class="rt-scroll"><div class="rt" style="--cols:${cols}">
           <div class="rt-h" style="grid-column:1">${t('ingredients, in order')}</div>
-          <div class="rt-h" style="grid-column:2/${cols + 2}">${t("read left to right, tap a step when it's done →")}</div>
+          <div class="rt-h" style="grid-column:2/${cols + 2}">${t("read left to right, tap a step when it's done →")} <a class="rt-howto" href="/how-to-read/">${esc(t('How to read this'))}</a></div>
           ${ingCells}${stepCells}
         </div></div>
         </div>
