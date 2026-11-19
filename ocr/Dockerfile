@@ -3,7 +3,7 @@ FROM node:24-alpine
 ARG OCR_LANGS="eng fra deu spa ita por nld"
 RUN apk add --no-cache tesseract-ocr $(for l in $OCR_LANGS; do printf 'tesseract-ocr-data-%s ' "$l"; done)
 WORKDIR /app
-COPY server.js .
+COPY --chmod=644 server.js .
 USER node
 ENV OCR_LANGS=eng+fra
 EXPOSE 8884
