@@ -41,6 +41,8 @@ if (!memberCols.includes('collections')) db.exec('ALTER TABLE members ADD COLUMN
 if (!memberCols.includes('bonus')) db.exec('ALTER TABLE members ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0'); // extra AI uses granted by the admin, spent after the monthly allowance
 if (!memberCols.includes('created')) db.exec('ALTER TABLE members ADD COLUMN created INTEGER');
 if (!memberCols.includes('trash')) db.exec("ALTER TABLE members ADD COLUMN trash TEXT NOT NULL DEFAULT '[]'"); // deleted collections/recipes, restorable
+if (!memberCols.includes('daily')) db.exec('ALTER TABLE members ADD COLUMN daily TEXT'); // { date, recipe, claimed }
+if (!memberCols.includes('seen')) db.exec("ALTER TABLE members ADD COLUMN seen TEXT NOT NULL DEFAULT '[]'"); // every ingredient name ever in stock
 if (!memberCols.includes('prefs')) db.exec("ALTER TABLE members ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'"); // e.g. { palette: 'night' }
 // analytics: one counter per day and kind of action
 db.exec('CREATE TABLE IF NOT EXISTS events (day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind))');
@@ -79,6 +81,7 @@ const STARTER = {
   it: ['Preferite', 'Da provare', 'Cene veloci'], de: ['Favoriten', 'Ausprobieren', 'Schnelles Abendessen'],
 };
 const newId = (p) => p + Math.random().toString(36).slice(2, 9);
+const dailyJobs = new Map(); // one generation in flight per member
 const LAYOUTS = ['stack', 'grid', 'list'];
 const PALETTES = ['enamel', 'pastel', 'summer', 'night'];
 // Starter collections come pre-filled from the seed recipes (2 each, rotating), so nobody opens an empty kitchen.
@@ -99,6 +102,10 @@ const q = {
   getCols: db.prepare('SELECT collections FROM members WHERE uuid = ?'),
   getPrefs: db.prepare('SELECT prefs FROM members WHERE uuid = ?'),
   getTrash: db.prepare('SELECT trash FROM members WHERE uuid = ?'),
+  getDaily: db.prepare('SELECT daily FROM members WHERE uuid = ?'),
+  setDaily: db.prepare('UPDATE members SET daily = ? WHERE uuid = ?'),
+  getSeen: db.prepare('SELECT seen FROM members WHERE uuid = ?'),
+  setSeen: db.prepare('UPDATE members SET seen = ? WHERE uuid = ?'),
   setTrash: db.prepare('UPDATE members SET trash = ? WHERE uuid = ?'),
   setPrefs: db.prepare('UPDATE members SET prefs = ? WHERE uuid = ?'),
   setCols: db.prepare('UPDATE members SET collections = ? WHERE uuid = ?'),
@@ -361,8 +368,47 @@ async function api(req, res, p) {
   if (p === '/api/stock' && req.method === 'PUT') {
     const next = await readBody(req, 512 * 1024);
     if (!Array.isArray(next)) throw fail(400, 'Stock must be an array');
+    // Anything that disappeared (e.g. counted down to zero) goes to the trash, restorable.
+    const ids = new Set(next.map((x) => x && x.id));
+    const trashed = stock.filter((x) => x && x.id && !ids.has(x.id)).map((x) => ({ item: x.id, trash: toTrash(m.uuid, { type: 'stock', item: x }) }));
     q.setStock.run(JSON.stringify(next.slice(0, 500)), m.uuid);
-    return send(res, 200, { ok: true });
+    const seen = new Set(JSON.parse(q.getSeen.get(m.uuid)?.seen || '[]'));
+    for (const x of next) if (x && x.name) seen.add(String(x.name).toLowerCase().slice(0, 60));
+    q.setSeen.run(JSON.stringify([...seen].slice(-1000)), m.uuid);
+    return send(res, 200, { ok: true, trashed });
+  }
+
+  if (p === '/api/ingredients/history' && req.method === 'GET') {
+    const count = new Map();
+    const add = (n, w) => { const k = String(n || '').toLowerCase().trim(); if (k) count.set(k, (count.get(k) || 0) + w); };
+    JSON.parse(q.getSeen.get(m.uuid)?.seen || '[]').forEach((n) => add(n, 2));
+    recipes.forEach((r) => (r.steps || []).forEach((st) => (st.uses || []).forEach((u) => add(u.name, 1))));
+    return send(res, 200, [...count].sort((a, b) => b[1] - a[1]).slice(0, 200).map(([name, n]) => ({ name, n })));
+  }
+
+  // Today's pick: one recipe a day from the member's stock. Free (the site's gift), cached per day, claimable.
+  if (p === '/api/daily' && req.method === 'GET') {
+    const d = JSON.parse(q.getDaily.get(m.uuid)?.daily || 'null');
+    if (d && d.date === today()) return send(res, 200, d);
+    if (!stock.length || !process.env.ANTHROPIC_API_KEY) return send(res, 200, null);
+    const lang = langOf(new URL(req.url, 'http://x').searchParams.get('lang'));
+    if (!dailyJobs.has(m.uuid)) {
+      const prompt = `Create one inviting everyday recipe, today's pick, using mainly these ingredients: ${stock.map((x) => x.name).slice(0, 60).join(', ')}.\n` +
+        'Assume salt, pepper, oil and water are available; anything else not listed is optional or minimal.\n' + RECIPE_SHAPE + writeIn(lang);
+      dailyJobs.set(m.uuid, callClaude(prompt, RECIPE_SYSTEM).then((text) => {
+        const daily = { date: today(), recipe: asRecipe(text, { id: 'daily-' + today(), lang: lang || undefined, daily: true }), claimed: false };
+        q.setDaily.run(JSON.stringify(daily), m.uuid); track('daily');
+        return daily;
+      }).finally(() => dailyJobs.delete(m.uuid)));
+    }
+    return send(res, 200, await dailyJobs.get(m.uuid));
+  }
+  if (p === '/api/daily/claim' && req.method === 'POST') {
+    const d = JSON.parse(q.getDaily.get(m.uuid)?.daily || 'null');
+    if (!d || d.date !== today()) throw fail(404, 'Today\'s pick is not ready yet.');
+    const copy = { ...d.recipe, id: 'r' + Date.now().toString(36), daily: undefined, collections: [] };
+    if (!d.claimed) { q.setRecipes.run(JSON.stringify([...recipes, copy]), m.uuid); d.claimed = copy.id; q.setDaily.run(JSON.stringify(d), m.uuid); }
+    return send(res, 200, d);
   }
 
   if (p === '/api/tags' && req.method === 'GET') return send(res, 200, { mode: aiTagMode(), tags: tagList() });
@@ -370,11 +416,14 @@ async function api(req, res, p) {
   // Collections: [{ id, name }]. A recipe lists the collections it's in as recipe.collections = [ids].
   let cols = JSON.parse(q.getCols.get(m.uuid)?.collections || 'null');
   if (!cols) { cols = (STARTER[langOf(new URL(req.url, 'http://x').searchParams.get('lang'))] || STARTER.en).map((name) => ({ id: newId('c'), name, layout: 'stack', starter: true })); q.setCols.run(JSON.stringify(cols), m.uuid); }
-  if (cols.some((c, k) => k < 3 && !c.seeded)) {
+  if (!cols.some((c) => c.special)) { cols.unshift({ id: 'all', special: true, layout: 'stack' }); q.setCols.run(JSON.stringify(cols), m.uuid); }
+  if (cols.filter((c) => !c.special).slice(0, 3).some((c) => !c.seeded)) {
     // Fill each starter collection with default recipes once (also for accounts created before this existed).
     const have = new Set(recipes.map((r) => r.id)), seed = JSON.parse(SEED);
-    cols = cols.map((c, k) => {
-      if (k >= 3 || c.seeded) return c;
+    const starters = cols.filter((c) => !c.special).slice(0, 3);
+    cols = cols.map((c) => {
+      const k = starters.indexOf(c);
+      if (k < 0 || c.seeded) return c;
       const empty = !recipes.some((r) => (r.collections || []).includes(c.id));
       if (empty) for (const id of seedFor(k)) {
         if (!have.has(id)) { const sr = seed.find((x) => x.id === id); if (sr) { recipes.push({ ...sr }); have.add(id); } }
@@ -395,13 +444,13 @@ async function api(req, res, p) {
     q.setCols.run(JSON.stringify([...cols, c]), m.uuid);
     return send(res, 200, c);
   }
-  const colM = /^\/api\/collections\/(c[a-z0-9]+)$/.exec(p);
+  const colM = /^\/api\/collections\/(c[a-z0-9]+|all)$/.exec(p);
   if (colM && req.method === 'PATCH') {
     // Collection settings: name, layout (stack | grid | list), hidden, cover recipe, move (-1 / 1 to reorder).
     const b = await readBody(req, 4096), i = cols.findIndex((c) => c.id === colM[1]);
     if (i < 0) throw fail(404, 'Not found');
     const c = { ...cols[i] };
-    if (b.name !== undefined) { c.name = String(b.name).trim().slice(0, 60); if (!c.name) throw fail(400, 'Give the collection a name.'); }
+    if (b.name !== undefined && !c.special) { c.name = String(b.name).trim().slice(0, 60); if (!c.name) throw fail(400, 'Give the collection a name.'); }
     if (b.layout !== undefined) { if (!LAYOUTS.includes(b.layout)) throw fail(400, 'Unknown layout.'); c.layout = b.layout; }
     if (b.hidden !== undefined) c.hidden = Boolean(b.hidden);
     if (b.cover !== undefined) c.cover = recipes.some((r) => r.id === b.cover) ? b.cover : '';
@@ -411,6 +460,7 @@ async function api(req, res, p) {
     q.setCols.run(JSON.stringify(cols), m.uuid);
     return send(res, 200, cols);
   }
+  if (colM && req.method === 'DELETE' && colM[1] === 'all') throw fail(400, '"All" is built in and can\'t be deleted, but you can hide it.');
   if (colM && req.method === 'DELETE') {
     // Into the trash with the list of recipes it held, so a restore puts everything back.
     const c = cols.find((x) => x.id === colM[1]);
@@ -433,7 +483,11 @@ async function api(req, res, p) {
     q.setTrash.run(JSON.stringify(trash.filter((x) => x.id !== entry.id)), m.uuid);
     if (req.method === 'DELETE' && !trM[2]) return send(res, 200, { ok: true });
     if (req.method !== 'POST' || !trM[2]) throw fail(404, 'Not found');
-    if (entry.type === 'recipe') {
+    if (entry.type === 'stock') {
+      const it = { ...entry.item, qty: Math.max(1, Number(entry.item.qty) || 1) };
+      if (stock.some((x) => x.id === it.id)) it.id = newId('s');
+      q.setStock.run(JSON.stringify([...stock, it]), m.uuid);
+    } else if (entry.type === 'recipe') {
       q.setRecipes.run(JSON.stringify([...recipes.filter((r) => r.id !== entry.item.id), { ...entry.item, collections: (entry.item.collections || []).filter((id) => cols.some((c) => c.id === id)) }]), m.uuid);
     } else {
       const c = cols.some((x) => x.id === entry.item.id) ? { ...entry.item, id: newId('c') } : entry.item;
@@ -449,7 +503,7 @@ async function api(req, res, p) {
     const r = await readBody(req, 512 * 1024);
     if (!r.title || !Array.isArray(r.steps)) throw fail(400, 'Invalid recipe');
     r.id = String(r.id || 'r' + Date.now().toString(36)).slice(0, 80);
-    r.collections = [...new Set((Array.isArray(r.collections) ? r.collections : []).filter((id) => cols.some((c) => c.id === id)))];
+    r.collections = [...new Set((Array.isArray(r.collections) ? r.collections : []).filter((id) => cols.some((c) => c.id === id && !c.special)))];
     q.setRecipes.run(JSON.stringify([...recipes.filter((x) => x.id !== r.id), r].slice(-1000)), m.uuid);
     return send(res, 200, r);
   }

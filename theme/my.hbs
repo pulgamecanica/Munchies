@@ -1,6 +1,7 @@
 {{!< default}}
 {{#if @member}}
   <div id="box" aria-live="polite"><p class="empty" data-t>Loading your kitchen…</p></div>
+  <script src="{{asset "js/ingredients.js"}}" defer></script>
   <script src="{{asset "js/box.js"}}" defer></script>
 {{else}}
   <section class="intro">

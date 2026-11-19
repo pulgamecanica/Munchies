@@ -61,6 +61,7 @@
     const base = Number(recipe.servings) || 2;
     const key = 'rt:' + (recipe.id || recipe.title);
     let servings = base;
+    let newCol = false; // inline "new collection" form in place of the picker
     let done;
     try { done = new Set(JSON.parse(localStorage.getItem(key)) || []); } catch { done = new Set(); }
 
@@ -93,9 +94,12 @@
         <div class="rt-controls">
           <span class="seg" role="group" aria-label="${t('Scale')}">${[0.5, 1, 2].map((x) => `<button type="button" data-scale="${x}" class="${servings === base * x ? 'on' : ''}">${x === 0.5 ? '½' : x}×</button>`).join('')}</span>
           <label>${t('Servings')} <input type="number" min="1" max="99" value="${servings}" data-serv></label>
-          ${opts.collections ? `<select class="rt-col" data-col aria-label="${esc(t('Add to collection…'))}">
+          ${opts.collections && newCol ? `<form class="rt-newcol" data-newcol-form>
+            <input name="name" maxlength="60" required placeholder="${esc(t('Collection name'))}" aria-label="${esc(t('Collection name'))}">
+            <button class="btn primary">${esc(t('Create'))}</button><button type="button" class="btn" data-newcol-cancel>${esc(t('Cancel'))}</button></form>` : ''}
+          ${opts.collections && !newCol ? `<select class="rt-col" data-col aria-label="${esc(t('Add to collection…'))}">
             <option value="">${esc(t('Add to collection…'))}</option>
-            ${opts.collections.list.map((c) => `<option value="${esc(c.id)}">${(recipe.collections || []).includes(c.id) ? '✓ ' : ''}${esc(c.name)}</option>`).join('')}
+            ${opts.collections.list.filter((c) => !c.special).map((c) => `<option value="${esc(c.id)}">${(recipe.collections || []).includes(c.id) ? '✓ ' : ''}${esc(c.name)}</option>`).join('')}
             <option value="+">${esc(t('New collection…'))}</option></select>` : ''}
           ${(opts.actions || []).map((a, i) => `<button type="button" class="btn${a.primary ? ' primary' : ''}" data-act="${i}">${esc(a.label)}</button>`).join('')}
           <button type="button" class="btn" data-copy>${t('Copy')}</button>
@@ -116,24 +120,99 @@
     el.onclick = async (e) => {
       const b = e.target.closest('button');
       if (!b) return;
+      if (b.hasAttribute('data-newcol-cancel')) { newCol = false; return draw(); }
       if (b.dataset.i) {
         const i = Number(b.dataset.i);
         done.has(i) ? done.delete(i) : done.add(i);
         try { localStorage.setItem(key, JSON.stringify([...done])); } catch {}
       } else if (b.dataset.scale) servings = Math.max(1, Math.round(base * Number(b.dataset.scale) * 10) / 10);
-      else if (b.hasAttribute('data-print')) return window.print();
+      else if (b.hasAttribute('data-print')) return printDialog(recipe);
       else if (b.hasAttribute('data-copy')) {
         await navigator.clipboard.writeText(toMarkdown(recipe, servings / base)).catch(() => {});
         b.textContent = t('Copied ✓'); return;
       } else if (b.dataset.act) return opts.actions[Number(b.dataset.act)].run(recipe, b);
       draw();
     };
+    el.onsubmit = async (e) => {
+      if (!e.target.hasAttribute('data-newcol-form')) return;
+      e.preventDefault();
+      const name = new FormData(e.target).get('name').trim();
+      if (name) await opts.collections.create(recipe, name);
+      newCol = false; draw();
+    };
     el.onchange = async (e) => {
       if (e.target.dataset.serv !== undefined) { servings = Math.max(1, Number(e.target.value) || base); draw(); }
+      if (e.target.dataset.col !== undefined && e.target.value === '+') { newCol = true; draw(); el.querySelector('[data-newcol-form] input').focus(); return; }
       if (e.target.dataset.col !== undefined && e.target.value) { await opts.collections.pick(recipe, e.target.value); draw(); }
     };
     draw();
     return { redraw: (stock) => { opts.stock = stock; draw(); } };
+  }
+
+  /* Print dialog: the real recipe rendered as a page in every style (each theme + black & white).
+     Small live renders to choose from, a large page preview of the choice; the page itself goes back to normal after printing. */
+  const PALS = ['enamel', 'pastel', 'summer', 'night'];
+  const PAGE_W = 760; // previews render at this width, then scale down to fit
+  function pageMarkup(recipe) {
+    const box = document.createElement('div');
+    render(recipe, box, {});
+    box.querySelectorAll('.rt-controls, .rt-shop').forEach((x) => x.remove());
+    // Previews sit inside clickable cards, and buttons can't nest: turn the step buttons into plain blocks.
+    box.querySelectorAll('button').forEach((b) => { const d = document.createElement('div'); d.className = b.className; d.setAttribute('style', b.getAttribute('style') || ''); d.innerHTML = b.innerHTML; b.replaceWith(d); });
+    return box.innerHTML;
+  }
+  function printDialog(recipe) {
+    const root = document.documentElement, current = root.dataset.palette || 'enamel';
+    const names = { enamel: 'Enamel', pastel: 'Pastel', summer: 'Summer', night: 'Night', bw: 'Black & white' };
+    const styles = [current, ...PALS.filter((x) => x !== current), 'bw'];
+    const page = pageMarkup(recipe);
+    const paper = (style) => `<div class="paper${style === 'bw' ? ' bw' : ''}" ${style === 'bw' ? '' : `data-palette="${style}"`} aria-hidden="true"><div class="paper-in rt-wrap">${page}</div></div>`;
+    let chosen = current;
+    const dlg = document.createElement('dialog');
+    dlg.className = 'print-dlg';
+    dlg.setAttribute('aria-label', t('Print'));
+    dlg.innerHTML = `
+      <div class="pd-stage">${paper(chosen)}</div>
+      <aside class="pd-side">
+        <div class="pd-styles" role="radiogroup" aria-label="${esc(t('Choose a print style'))}">
+          ${styles.map((x) => `<button type="button" role="radio" class="pd-style" data-style="${x}" aria-checked="${x === chosen}">
+            ${paper(x)}<span>${esc(t(names[x]))}${x === current ? ` <small>${esc(t('Current theme'))}</small>` : ''}</span></button>`).join('')}
+        </div>
+        <div class="pd-actions"><button type="button" class="btn" data-cancel>${esc(t('Cancel'))}</button><button type="button" class="btn primary" data-go>${esc(t('Print'))}</button></div>
+      </aside>`;
+    document.body.append(dlg);
+    const fit = () => dlg.querySelectorAll('.paper').forEach((p) => p.style.setProperty('--s', p.clientWidth / PAGE_W));
+    const pick = (style) => {
+      chosen = style;
+      dlg.querySelectorAll('.pd-style').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.style === style)));
+      dlg.querySelector('.pd-stage').innerHTML = paper(style); fit();
+    };
+    dlg.addEventListener('click', (e) => {
+      if (e.target === dlg || e.target.closest('[data-cancel]')) return dlg.close();
+      const b = e.target.closest('[data-style]'); if (b) return pick(b.dataset.style);
+      if (e.target.closest('[data-go]')) { dlg.returnValue = 'print'; dlg.close(); }
+    });
+    dlg.addEventListener('keydown', (e) => {
+      if (!e.target.closest('.pd-styles') || !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      e.preventDefault();
+      const i = styles.indexOf(chosen), j = (i + (e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1) + styles.length) % styles.length;
+      pick(styles[j]); dlg.querySelector(`[data-style="${styles[j]}"]`).focus();
+    });
+    window.addEventListener('resize', fit);
+    dlg.addEventListener('close', () => {
+      window.removeEventListener('resize', fit);
+      const go = dlg.returnValue === 'print';
+      dlg.remove();
+      if (!go) return;
+      const before = root.dataset.palette;
+      if (chosen === 'bw') root.dataset.print = 'bw'; else { root.dataset.print = 'color'; root.dataset.palette = chosen; }
+      const restore = () => { delete root.dataset.print; root.dataset.palette = before; window.removeEventListener('afterprint', restore); };
+      window.addEventListener('afterprint', restore);
+      setTimeout(() => window.print(), 50);
+    });
+    dlg.showModal();
+    fit();
+    dlg.querySelector('[aria-checked="true"]').focus();
   }
 
   // AI translation into the visitor's language (members, metered). Hidden when the recipe is already in it.
@@ -152,15 +231,13 @@
   // Collections picker: toggling a collection saves the recipe (with its collections) to the member's kitchen.
   const collectionsFor = (list, onSaved) => ({
     list,
-    async pick(recipe, value) {
-      let id = value;
-      if (value === '+') {
-        const name = (prompt(t('Collection name')) || '').trim();
-        if (!name) return;
-        const r = await fetch('/api/collections', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
-        if (!r.ok) return;
-        const c = await r.json(); list.push(c); id = c.id;
-      }
+    async create(recipe, name) {
+      const r = await fetch('/api/collections', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+      if (!r.ok) return;
+      const c = await r.json(); list.push(c);
+      return this.pick(recipe, c.id);
+    },
+    async pick(recipe, id) {
       const has = new Set(recipe.collections || []);
       const name = (list.find((c) => c.id === id) || {}).name;
       has.has(id) ? has.delete(id) : has.add(id);

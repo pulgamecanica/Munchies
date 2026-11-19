@@ -74,6 +74,11 @@ Each member's space: make tables, collections, stock, cook from stock. Rename it
 
 - **Colour themes:** Enamel (follows system light/dark), Pastel, Summer and Night. The site default is **Ghost admin → Settings → Design → Palette**. Visitors switch with the swatch in the header (remembered in their browser); signed-in members also get it saved to their account (`PUT /api/prefs`).
 - **Collection settings** (⚙ on each collection): name, layout (3D stack, grid or list), cover recipe (front of the stack), hide from the kitchen, move left/right, delete.
+- **"All"** is a built-in collection that always holds every recipe: it can be hidden, re-laid-out and given a cover, but not renamed or deleted.
+- **Today's pick:** once a day the site makes one recipe from the member's stock (cached per day, free, logged as `daily` in analytics). Members can open it or claim a copy into their kitchen; it stays today's pick either way.
+- **Collections overview** (gear next to "My collections"): show/hide, layout and order for every collection at once. "New collection" opens an inline form (also inside a recipe's "Add to collection" menu).
+- **Ingredient explorer** (✦ Explore next to Add): tiles from the member's history (`GET /api/ingredients/history`) plus a 6-language catalog (`theme/assets/js/ingredients.js`); tap to add one, − to remove one. Counting an ingredient down to zero moves it to the trash (Undo or restore from the trash page).
+- **Print:** opens a picker that renders the real recipe as a page in every style (each colour theme + black & white); colour prints keep their colours.
 - **Collections:** every account starts with three, each pre-filled with default recipes (Favourites, Want to try, Weeknight dinners, named in the member's language). Members add, rename and delete their own. Any recipe table has an **Add to collection…** picker; a recipe can sit in several. In the kitchen each collection is a 3D stack: pass through with the arrows, a swipe or the arrow keys; click the front card to open it, a back card to bring it forward; **Open** fans the whole collection out.
 - **Stock tags** are global and admin-only: names in 6 languages plus an SVG icon (14 built in; paste any SVG, e.g. from SVGRepo). The admin picks the AI mode: *off*, *assign existing tags*, or *assign and create* (the AI names the new tag in all languages and draws its icon). Icons render as CSS masks in the theme colour, so pasted SVG can't run code; the server also rejects scripts, event handlers and links in icons.
 - **Trash:** deleting a collection or recipe moves it to the trash (a toast offers Undo). The trash page (`/my/trash/`, linked at the very bottom of the kitchen) restores items, a collection together with its recipes, or deletes them forever.
@@ -106,6 +111,8 @@ Cookbook photos are OCR'd first. If the page has enough text (80+ characters), C
 | `POST /api/translate` `{recipe, lang}` | translate a recipe (AI, metered) |
 | `GET/POST /api/collections`, `PATCH/DELETE /api/collections/:id` | the member's collections (3 starters on first visit) |
 | `GET /api/tags` | stock tags + the AI tagging mode |
+| `GET /api/daily`, `POST /api/daily/claim` | today's pick, claim a copy |
+| `GET /api/ingredients/history` | every ingredient the member's kitchen has seen |
 | `GET/DELETE /api/trash`, `POST /api/trash/:id/restore`, `DELETE /api/trash/:id` | the trash: list, empty, restore, delete forever |
 | `POST /api/stock/sort` | AI files untagged stock under tags (metered) |
 | `/api/admin` | **admin center** (Bearer `ADMIN_TOKEN`): analytics, edit usage and bonus AI uses per member, stock tags + icons, AI tagging mode |

@@ -22,9 +22,9 @@
       <p class="note">${esc(t('Deleted collections and recipes wait here until you restore them or delete them forever.'))}</p>
       ${items.length ? `<ul class="trash-list">${items.map((x) => `
         <li class="trash-item">
-          <span class="scard-emoji" aria-hidden="true">${x.type === 'recipe' ? esc(x.item.emoji || '🍽️') : '🗂️'}</span>
+          <span class="scard-emoji" aria-hidden="true">${x.type === 'recipe' ? esc(x.item.emoji || '🍽️') : x.type === 'stock' ? '🧺' : '🗂️'}</span>
           <span class="trash-what"><b>${esc(x.type === 'recipe' ? x.item.title : x.item.name)}</b>
-            <small>${esc(t(x.type === 'recipe' ? 'Recipe' : 'Collection'))}${x.type === 'collection' ? ` · ${esc((x.recipes || []).length === 1 ? t('1 recipe') : t('{n} recipes', { n: (x.recipes || []).length }))}` : ''} · ${esc(t('Deleted {date}', { date: when(x.deleted) }))}</small></span>
+            <small>${esc(t(x.type === 'recipe' ? 'Recipe' : x.type === 'stock' ? 'Ingredient' : 'Collection'))}${x.type === 'collection' ? ` · ${esc((x.recipes || []).length === 1 ? t('1 recipe') : t('{n} recipes', { n: (x.recipes || []).length }))}` : ''} · ${esc(t('Deleted {date}', { date: when(x.deleted) }))}</small></span>
           <span class="row"><button type="button" class="btn primary" data-restore="${esc(x.id)}">${esc(t('Restore'))}</button>
           <button type="button" class="btn danger" data-forever="${esc(x.id)}">${esc(t('Delete forever'))}</button></span>
         </li>`).join('')}</ul>` : `<div class="trash-empty"><span class="trash-ico big" aria-hidden="true"></span><p>${esc(t('Trash is empty.'))}</p></div>`}`;

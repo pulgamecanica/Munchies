@@ -119,13 +119,12 @@
   const VISIBLE = 4;
   const groups = () => {
     const g = S.cols.map((c, k) => {
-      const rs = S.recipes.filter((r) => (r.collections || []).includes(c.id));
+      const rs = c.special ? [...S.recipes] : S.recipes.filter((r) => (r.collections || []).includes(c.id));
       const cover = rs.findIndex((r) => r.id === c.cover);
       if (cover > 0) rs.unshift(...rs.splice(cover, 1));
-      return { ...c, k, own: true, layout: c.layout || 'stack', recipes: rs };
+      return { ...c, k, own: true, name: c.special ? t('All') : c.name, layout: c.layout || 'stack', recipes: rs };
     });
-    const loose = S.recipes.filter((r) => !(r.collections || []).length);
-    return loose.length ? [...g, { id: 'unsorted', name: t('Unsorted'), layout: 'list', recipes: loose }] : g;
+    return g;
   };
   const missingOf = (r) => r.steps.flatMap((s) => s.uses || []).filter((x) => !x.optional && !window.RecipeTable.isStaple(x.name) && !findStock(S.stock, x.name)).length;
   const posOf = (k, n, rot) => ((k - rot) % n + n) % n;
@@ -173,7 +172,8 @@
     return `
       <form class="col-settings" id="col-settings" data-col="${esc(g.id)}">
         <div class="col-settings-head"><h3>${esc(t('Collection settings'))}</h3><button type="button" class="btn primary" data-settings-done>${esc(t('Done'))}</button></div>
-        <label class="field"><span>${esc(t('Collection name'))}</span><input name="name" value="${esc(g.name)}" maxlength="60" required></label>
+        ${g.special ? `<p class="note">${esc(t('"All" is built in: it always holds every recipe. You can change how it looks or hide it.'))}</p>`
+          : `<label class="field"><span>${esc(t('Collection name'))}</span><input name="name" value="${esc(g.name)}" maxlength="60" required></label>`}
         <fieldset class="field"><legend>${esc(t('Layout'))}</legend>
           <div class="seg">${[['stack', 'Stack'], ['grid', 'Grid'], ['list', 'List']].map(([v, l]) => `<label class="${g.layout === v ? 'on' : ''}"><input type="radio" name="layout" value="${v}" ${g.layout === v ? 'checked' : ''}>${esc(t(l))}</label>`).join('')}</div>
         </fieldset>
@@ -183,7 +183,7 @@
         <div class="row col-settings-foot">
           <button type="button" class="btn" data-move="-1" ${i <= 0 ? 'disabled' : ''}>‹ ${esc(t('Move left'))}</button>
           <button type="button" class="btn" data-move="1" ${i >= S.cols.length - 1 ? 'disabled' : ''}>${esc(t('Move right'))} ›</button>
-          <button type="button" class="btn danger" data-delcol>${esc(t('Move to trash'))}</button>
+          ${g.special ? '' : `<button type="button" class="btn danger" data-delcol>${esc(t('Move to trash'))}</button>`}
         </div>
       </form>`;
   }
@@ -248,6 +248,113 @@
       </div>`).join('');
   }
 
+  /* Collections overview (gear next to "My collections"): show/hide, layout and order for every collection at once. */
+  function overviewHTML() {
+    const gs = groups();
+    return `
+      <div class="overview" id="overview">
+        <div class="col-settings-head"><h3>${esc(t('Collections overview'))}</h3><button type="button" class="btn primary" data-overview-done>${esc(t('Done'))}</button></div>
+        <ul class="ov-list">${gs.map((g, i) => `
+          <li class="ov-row${g.hidden ? ' is-hidden' : ''}">
+            <label class="switch"><input type="checkbox" data-ov-visible="${esc(g.id)}" ${g.hidden ? '' : 'checked'}><span aria-hidden="true"></span><b>${esc(g.name)}</b></label>
+            <small>${esc(g.recipes.length === 1 ? t('1 recipe') : t('{n} recipes', { n: g.recipes.length }))}</small>
+            <select data-ov-layout="${esc(g.id)}" aria-label="${esc(t('Layout'))}: ${esc(g.name)}">${[['stack', 'Stack'], ['grid', 'Grid'], ['list', 'List']].map(([v, l]) => `<option value="${v}" ${g.layout === v ? 'selected' : ''}>${esc(t(l))}</option>`).join('')}</select>
+            <span class="ov-move"><button type="button" class="icon-btn" data-ov-move="${esc(g.id)}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="${esc(t('Move left'))}">↑</button><button type="button" class="icon-btn" data-ov-move="${esc(g.id)}" data-dir="1" ${i === gs.length - 1 ? 'disabled' : ''} aria-label="${esc(t('Move right'))}">↓</button></span>
+          </li>`).join('')}</ul>
+      </div>`;
+  }
+
+  /* Today's pick: one recipe a day from the stock, made by the site (doesn't use the member's AI uses). */
+  function dailyHTML() {
+    if (S.daily === undefined) return '';
+    if (S.daily === 'loading') return `<section class="daily is-loading" aria-busy="true"><span class="daily-label">${esc(t("Today's pick"))}</span><p>${esc(t("Picking today's recipe from your stock…"))}</p><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></section>`;
+    if (!S.daily) return S.me.ai ? `<section class="daily is-empty"><span class="daily-label">${esc(t("Today's pick"))}</span><p>${esc(t("Add some stock and you'll get a recipe picked for you every day."))}</p></section>` : '';
+    const r = S.daily.recipe;
+    return `
+      <section class="daily">
+        <span class="daily-emoji" aria-hidden="true">${esc(r.emoji || '🍽️')}</span>
+        <div class="daily-body">
+          <span class="daily-label">${esc(t("Today's pick"))}</span>
+          <h2>${esc(r.title)}</h2>
+          ${r.description ? `<p>${esc(r.description)}</p>` : ''}
+          <div class="row">${badge(r)}${r.time ? `<small>⏱ ${esc(r.time)}</small>` : ''}</div>
+          <div class="row daily-actions">
+            <button type="button" class="btn primary" data-daily-open>${esc(t('Open'))}</button>
+            ${S.daily.claimed ? `<span class="claimed">${esc(t('In your kitchen ✓'))}</span>` : `<button type="button" class="btn" data-daily-claim>${esc(t('Claim to my kitchen'))}</button>`}
+          </div>
+        </div>
+      </section>`;
+  }
+
+  /* Ingredient explorer: big tiles, tap to add one, − to take one away. Your kitchen's history first, then the catalog. */
+  const LI = ['en', 'es', 'fr', 'pt', 'it', 'de'].indexOf(lang);
+  const CAT = (window.INGREDIENTS || []).map(([emoji, tag, unit, ...names]) => ({ emoji, tag, unit, name: names[LI] || names[0], all: names.map(strip) }));
+  const catFor = (name) => { const k = strip(name); return CAT.find((c) => c.all.includes(k)); };
+  const inStock = (name) => S.stock.find((x) => strip(x.name) === strip(name));
+  const EX = { q: '', cat: 'all', history: [] };
+  let dlg;
+  function openExplorer() {
+    dlg = document.createElement('dialog');
+    dlg.className = 'explorer';
+    dlg.setAttribute('aria-labelledby', 'ex-title');
+    document.body.append(dlg);
+    dlg.addEventListener('close', () => { dlg.remove(); dlg = null; draw(); });
+    dlg.addEventListener('click', (e) => {
+      if (e.target === dlg) return dlg.close(); // backdrop
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.exCat) { EX.cat = b.dataset.exCat; return drawExplorer(); }
+      if ('exClose' in b.dataset) return dlg.close();
+      const name = b.closest('[data-ex]')?.dataset.ex; if (!name) return;
+      const it = inStock(name), c = catFor(name);
+      if (b.dataset.exMinus !== undefined) { if (it) { it.qty = Math.max(0, it.qty - 1); S.stock = S.stock.filter((x) => x.qty > 0); } }
+      else if (it) it.qty += 1;
+      else S.stock.push({ id: uid(), name, qty: 1, unit: (c && c.unit) || 'pcs', note: '', tag: (c && c.tag) || '' });
+      saveStock(); drawExplorer();
+      const tile = dlg.querySelector(`[data-ex="${CSS.escape(name)}"]`);
+      if (tile) { tile.classList.remove('pop'); void tile.offsetWidth; tile.classList.add('pop'); }
+    });
+    dlg.addEventListener('input', (e) => { if (e.target.name === 'q') { EX.q = e.target.value; drawExplorer(true); } });
+    drawExplorer();
+    dlg.showModal();
+    api('/api/ingredients/history').then((h) => { EX.history = h.map((x) => x.name); if (dlg) drawExplorer(true); }).catch(() => {});
+  }
+  function drawExplorer(keepSearch) {
+    const q = strip(EX.q);
+    const tile = (name, emoji, tag) => {
+      const it = inStock(name);
+      const tg = S.tags.find((x) => x.id === tag);
+      return `<li class="ex-tile${it ? ' has' : ''}" data-ex="${esc(name)}">
+        <button type="button" class="ex-add" aria-label="${esc(t('One more {name}', { name }))}">
+          <span class="ex-emoji" aria-hidden="true">${emoji ? esc(emoji) : tg ? tagIcon(tg.icon) : '🥄'}</span><span class="ex-name">${esc(name)}</span></button>
+        ${it ? `<span class="ex-qty">${esc(it.qty)}<small> ${esc(it.unit)}</small></span><button type="button" class="ex-minus" data-ex-minus aria-label="${esc(t('One less {name}', { name }))}">−</button>` : ''}
+      </li>`;
+    };
+    const match = (names) => !q || names.some((n) => n.includes(q));
+    const yours = EX.history.filter((n) => match([strip(n)])).map((n) => { const c = catFor(n); return { name: c ? c.name : n, emoji: c && c.emoji, tag: c && c.tag }; })
+      .filter((x, i, a) => a.findIndex((y) => strip(y.name) === strip(x.name)) === i).slice(0, 48);
+    const shelves = S.tags.map((tg) => ({ tg, items: CAT.filter((c) => c.tag === tg.id && match(c.all)) })).filter((x) => x.items.length);
+    const show = (id) => EX.cat === 'all' || EX.cat === id;
+    const added = S.stock.length;
+    const body = `
+      ${show('yours') && yours.length ? `<section><h3>${esc(t('From your kitchen'))}</h3><ul class="ex-grid">${yours.map((x) => tile(x.name, x.emoji, x.tag)).join('')}</ul></section>` : ''}
+      ${shelves.filter((x) => show(x.tg.id)).map(({ tg, items }) => `<section><h3>${tagIcon(tg.icon)}${esc(tagName(tg))}</h3><ul class="ex-grid">${items.map((c) => tile(c.name, c.emoji, c.tag)).join('')}</ul></section>`).join('')
+        || `<p class="empty">${esc(t('Nothing matches. Type the name and press Add in your stock instead.'))}</p>`}`;
+    if (keepSearch && dlg.querySelector('.ex-body')) { dlg.querySelector('.ex-body').innerHTML = body; dlg.querySelector('.ex-count').textContent = t('{n} items in your stock', { n: added }); return; }
+    dlg.innerHTML = `
+      <div class="ex-head">
+        <h2 id="ex-title">${esc(t('Explore ingredients'))}</h2>
+        <button type="button" class="btn primary" data-ex-close>${esc(t('Done'))}</button>
+      </div>
+      <p class="ex-hint">${esc(t('Tap to add, tap − to remove.'))} <span class="ex-count">${esc(t('{n} items in your stock', { n: added }))}</span></p>
+      <input class="ex-search" name="q" type="search" value="${esc(EX.q)}" placeholder="${esc(t('Search ingredients'))}" aria-label="${esc(t('Search ingredients'))}" autocomplete="off">
+      <nav class="ex-cats" aria-label="${esc(t('Categories'))}">
+        <button type="button" data-ex-cat="all" aria-pressed="${EX.cat === 'all'}">${esc(t('All'))}</button>
+        ${EX.history.length ? `<button type="button" data-ex-cat="yours" aria-pressed="${EX.cat === 'yours'}">${esc(t('From your kitchen'))}</button>` : ''}
+        ${S.tags.filter((tg) => CAT.some((c) => c.tag === tg.id)).map((tg) => `<button type="button" data-ex-cat="${esc(tg.id)}" aria-pressed="${EX.cat === tg.id}">${tagIcon(tg.icon)}${esc(tagName(tg))}</button>`).join('')}
+      </nav>
+      <div class="ex-body">${body}</div>`;
+  }
+
   function draw() {
     const u = S.me.usage;
     const left = Math.max(0, u.limit - u.used);
@@ -259,6 +366,8 @@
         <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="${u.limit}" aria-valuenow="${u.used}" aria-label="${t('AI uses this month')}"><i style="width:${u.limit ? Math.min(100, (u.used / u.limit) * 100) : 100}%"></i></div>
         <small>${t('{used} of {limit} AI uses this month ({left} left)', { used: u.used, limit: u.limit, left })}${u.tier === 'free' ? ` · <a href="#/portal/account/plans">${t('Get Pro for more')}</a>` : ''}${u.bonus ? ` · <b>${t('+{n} bonus uses', { n: u.bonus })}</b>` : ''}${S.me.ai ? '' : ` · ${t('AI is off on this server')}`}</small>
       </section>
+
+      ${dailyHTML()}
 
       <section class="card">
         <h2>${t('Create a recipe')}</h2>
@@ -279,8 +388,17 @@
       <section class="collections">
         <div class="sec-head">
           <h2>${t('My collections')} <small>${S.cols.length}</small></h2>
-          <button type="button" class="btn" data-newcol>+ ${esc(t('New collection'))}</button>
+          <div class="row">
+            <button type="button" class="btn" data-newcol aria-expanded="${Boolean(S.newCol)}">+ ${esc(t('New collection'))}</button>
+            <button type="button" class="icon-btn gear" data-overview aria-label="${esc(t('Collections overview'))}" aria-expanded="${Boolean(S.overview)}">${GEAR}</button>
+          </div>
         </div>
+        ${S.newCol ? `<form id="newcol" class="newcol">
+          <label class="field"><span>${esc(t('Collection name'))}</span>
+            <input name="name" maxlength="60" required placeholder="${esc(t('e.g. Sunday lunches'))}" autocomplete="off"></label>
+          <div class="row"><button class="btn primary">${esc(t('Create'))}</button><button type="button" class="btn" data-newcol-cancel>${esc(t('Cancel'))}</button></div>
+        </form>` : ''}
+        ${S.overview ? overviewHTML() : ''}
         ${collectionsHTML()}
       </section>
 
@@ -292,6 +410,7 @@
         ${zone('stock', { title: t('Snap your groceries or fridge'), hint: t('We spot every ingredient, you confirm.'), imgs: S.scanning, busy: S.busy === 'scan' ? t('Recognising…') : '', multiple: true, small: true })}
         <div class="row add-row">
           <form id="add" class="row grow"><input name="name" placeholder="${t('Add an ingredient by hand…')}" aria-label="${t('Ingredient')}"><button class="btn">${t('Add')}</button></form>
+          <button type="button" class="btn explore" data-explore><span aria-hidden="true">✦</span> ${esc(t('Explore'))}</button>
         </div>
         ${S.found ? `<div class="found"><b>${t('Recognised: untick anything wrong')}</b>
           ${S.found.map((it, i) => `<label class="line"><input type="checkbox" data-pick="${i}" ${it.pick ? 'checked' : ''}> ${esc(it.name)} <small>${esc(it.quantity)} ${esc(it.unit)} ${esc(it.note)}</small></label>`).join('')}
@@ -313,7 +432,7 @@
 
   root.addEventListener('click', (e) => {
     if (swiped) { swiped = false; return; }
-    const el = e.target.closest('[data-mode],[data-bump],[data-addfound],[data-dropfound],[data-clear],[data-rid],[data-pass],[data-expand],[data-close],[data-newcol],[data-settings],[data-settings-done],[data-move],[data-showhidden],[data-delcol],[data-sort]');
+    const el = e.target.closest('[data-explore],[data-overview],[data-overview-done],[data-ov-move],[data-newcol-cancel],[data-daily-open],[data-daily-claim],[data-mode],[data-bump],[data-addfound],[data-dropfound],[data-clear],[data-rid],[data-pass],[data-expand],[data-close],[data-newcol],[data-settings],[data-settings-done],[data-move],[data-showhidden],[data-delcol],[data-sort]');
     if (!el) return;
     const d = el.dataset;
     const stack = el.closest('[data-stack]');
@@ -326,10 +445,15 @@
     }
     if ('expand' in d) { S.openCol = S.openCol === stack.dataset.stack ? null : stack.dataset.stack; draw(); return root.querySelector('#col-open').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
     if ('close' in d) { S.openCol = null; return draw(); }
-    if ('newcol' in d) {
-      const name = (prompt(t('Collection name')) || '').trim();
-      if (name) api('/api/collections', { name }).then((c) => { S.cols.push(c); S.settings = c.id; draw(); }).catch((x) => say(x.message));
-      return;
+    if ('newcol' in d) { S.newCol = !S.newCol; draw(); return root.querySelector('#newcol input')?.focus(); }
+    if ('newcolCancel' in d) { S.newCol = false; return draw(); }
+    if ('explore' in d) return openExplorer();
+    if ('overview' in d) { S.overview = !S.overview; return draw(); }
+    if ('overviewDone' in d) { S.overview = false; return draw(); }
+    if (d.ovMove) return patchCol(d.ovMove, { move: Number(d.dir) });
+    if ('dailyOpen' in d) return open(S.daily.recipe);
+    if ('dailyClaim' in d) {
+      return api('/api/daily/claim', {}).then(async (dd) => { S.daily = dd; await reload(); say(t('In your kitchen ✓')); }).catch((x) => say(x.message));
     }
     if (d.settings) { S.settings = S.settings === d.settings ? null : d.settings; draw(); return root.querySelector('#col-settings')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
     if ('settingsDone' in d) { S.settings = null; return draw(); }
@@ -351,11 +475,19 @@
       });
     }
     if (d.mode) { S.mode = d.mode; draw(); }
-    else if (d.bump) { const s = S.stock[Number(d.bump)]; s.qty = Math.max(0, s.qty + Number(d.d)); S.stock = S.stock.filter((x) => x.qty > 0); saveStock(); draw(); }
+    else if (d.bump) {
+      const s = S.stock[Number(d.bump)]; s.qty = Math.max(0, s.qty + Number(d.d));
+      if (s.qty > 0) { saveStock(); return draw(); }
+      S.stock = S.stock.filter((x) => x.qty > 0); draw();
+      clearTimeout(saveT);
+      api('/api/stock', S.stock, 'PUT').then((res) => { if (res.trashed && res.trashed[0]) trashed(res.trashed[0]); }).catch((x) => say(x.message));
+    }
     else if ('addfound' in d) { merge(S.found.filter((x) => x.pick)); S.found = null; draw(); }
     else if ('dropfound' in d) { S.found = null; draw(); }
   });
   root.addEventListener('change', async (e) => {
+    if (e.target.dataset.ovVisible) return patchCol(e.target.dataset.ovVisible, { hidden: !e.target.checked });
+    if (e.target.dataset.ovLayout) return patchCol(e.target.dataset.ovLayout, { layout: e.target.value });
     const form = e.target.closest('#col-settings');
     if (form) {
       const id = form.dataset.col, n = e.target.name;
@@ -370,7 +502,12 @@
   });
   root.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (e.target.id === 'col-settings') return e.target.querySelector('[name=name]').blur();
+    if (e.target.id === 'col-settings') return e.target.querySelector('[name=name]')?.blur();
+    if (e.target.id === 'newcol') {
+      const name = new FormData(e.target).get('name').trim();
+      if (name) api('/api/collections', { name }).then((c) => { S.cols.push(c); S.newCol = false; S.settings = c.id; draw(); say(t('Created {name}', { name })); }).catch((x) => say(x.message));
+      return;
+    }
     const f = new FormData(e.target);
     if (e.target.id === 'add') { if (f.get('name').trim()) merge([{ name: f.get('name').trim(), quantity: 1, unit: 'pcs' }]); draw(); return; }
     if (e.target.id === 'gen') {
@@ -431,6 +568,8 @@
 
   Promise.all([api('/api/me'), api('/api/stock'), api('/api/recipes'), api('/api/collections?lang=' + lang), api('/api/tags')])
     .then(([me, stock, recipes, cols, tags]) => { Object.assign(S, { me, stock, recipes, cols, tags: tags.tags, tagMode: tags.mode }); draw();
-      api('/api/trash').then((tr) => { S.trashCount = tr.length; draw(); }).catch(() => {}); })
+      api('/api/trash').then((tr) => { S.trashCount = tr.length; draw(); }).catch(() => {});
+      if (me.ai && stock.length) { S.daily = 'loading'; draw(); }
+      api('/api/daily?lang=' + lang).then((dd) => { S.daily = dd; draw(); }).catch(() => { S.daily = null; draw(); }); })
     .catch((e) => { root.innerHTML = `<p class="empty">${esc(e.message)}</p>`; });
 })();
