@@ -671,3 +671,5 @@ script[type="application/recipe+json"] { display: none; }
   html[data-print-align="center"] .rt-prep { list-style-position: inside; }
   html[data-print-align="justify"] :is(.rt-head p, .rt-note, .rt-prep li, .lede, .gh-content > p) { text-align: justify; hyphens: auto; }
 }
+/* the player's table: square corners so the square highlight outlines line up with its edges */
+.ht-table .rt-tray { border-radius: 0; }
