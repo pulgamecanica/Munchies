@@ -1,15 +1,45 @@
 # Recepees 🍳
 
-A Ghost site for **recipe tables**: ingredients run down the left in the order they're used, each step is a cell spanning exactly what it combines, and everything converges into the dish. Members also get a **recipe box**. They can turn a link, pasted text or a cookbook photo into a table, track their kitchen stock, and cook from what they have. AI use is metered per member and per plan.
+Recipes you can actually cook from. Ingredients run down the left in the order you use them, each step spans exactly what it combines, and everything converges into the dish. Built as a **Ghost** theme with a small companion API: members get **My kitchen** (collections, stock, today's pick), and the AI turns any link, pasted text or cookbook photo into a recipe, metered per plan.
 
-No npm dependencies anywhere: everything runs on Node 24 built-ins, plain browser JS, Ghost and Tesseract.
+No npm dependencies anywhere: Node 24 built-ins, plain browser JS, Ghost and Tesseract.
 
+<!-- SCREENSHOTS: drop PNGs into docs/screenshots/ with these names (see docs/screenshots/README.md). -->
+| | |
+|---|---|
+| ![Library](docs/screenshots/home.png) | ![A recipe](docs/screenshots/recipe.png) |
+| **Library** | **A recipe** |
+| ![My kitchen](docs/screenshots/kitchen.png) | ![Collections as 3D stacks](docs/screenshots/collections.png) |
+| **My kitchen**: today's pick, create a recipe | **Collections** as 3D stacks |
+| ![Ingredient explorer](docs/screenshots/explorer.png) | ![Print styles](docs/screenshots/print.png) |
+| **Ingredient explorer** | **Print** in every style |
+| ![Colour themes](docs/screenshots/themes.png) | ![Admin center](docs/screenshots/admin.png) |
+| **Colour themes**: Enamel, Pastel, Summer, Night | **Admin center** |
+| ![On a phone](docs/screenshots/phone.png) | |
+| **On a phone** | |
+
+## Features
+**For members**
+- **Recipes as convergence tables**: scale servings, tick off steps, see what's missing from your stock, translate, print.
+- **Create a recipe** from a link, pasted text or a cookbook photo (OCR first, AI vision as fallback). **Extract text only** is free.
+- **Today's pick**: one recipe a day from your stock, free; claim a copy into your kitchen.
+- **Collections**: three pre-filled starters plus the built-in **All**; 3D stacks you can flip through, or grid / list layouts; covers, hiding, ordering; an overview to manage them all.
+- **Stock**: add by photo, by hand, or tap tiles in the **ingredient explorer**; shelves by category with icons; **Sort my stock with AI** (limited per plan).
+- **Trash**: deleted collections, recipes and ingredients are restorable (`/my/trash/`, linked at the bottom of the kitchen); every delete has Undo.
+- **6 languages** (English, Español, Français, Português, Italiano, Deutsch) and **4 colour themes** (Enamel, Pastel, Summer, Night), both remembered per visitor and per member.
+
+**For the site owner**
+- Accounts, plans and payments are **native Ghost** (Portal + Stripe).
+- **Admin center** (`/api/admin`): analytics, per-member usage editing and bonus AI uses, stock tags with SVG icons, AI tagging mode.
+- **Ghost design settings**: kitchen name and default colour theme.
+
+## How it fits together
 ```
-browser ──► api (server.js :3000) ──► /api/*  recipe box, stock, OCR, AI, usage, admin center ──► SQLite (data/recepees.db)
+browser ──► api (server.js :3000) ──► /api/*  kitchen, stock, OCR, AI, usage, admin center ──► SQLite (data/recepees.db)
                                  │                                    └──► ocr (Tesseract :8884, internal only)
                                  └──► else    Ghost (theme, members, Portal, Stripe, /ghost admin)
 ```
-Everything is served from one origin, so the Ghost member cookie reaches the API, which asks Ghost who is signed in (cached for 30s). There's no second auth system.
+One origin for everything, so the Ghost member cookie reaches the API, which asks Ghost who is signed in (cached for 30s). There's no second login system.
 
 | Service | What | Image |
 |---|---|---|
@@ -19,17 +49,24 @@ Everything is served from one origin, so the Ghost member cookie reaches the API
 | `db` | MySQL 8.4, prod only (dev uses sqlite) | `mysql:8.4` |
 | `mailpit` | catches sign-in emails, dev only | `axllent/mailpit` |
 
-## Quick start (dev)
+| Path | |
+|---|---|
+| `server.js` | gateway + API |
+| `admin.html` | admin center |
+| `theme/` | the Ghost theme (`*.hbs`, `assets/css/screen.css`, `assets/js/*.js`) |
+| `ghost/routes.yaml` | `/my/` (kitchen) and `/my/trash/` |
+| `ocr/` | OCR microservice |
+| `default-tags.json`, `seed-recipes.json` | built-in stock tags and starter recipes |
+
+## Develop
 ```sh
 make env        # creates .env: set ANTHROPIC_API_KEY, ports, limits
 make up         # builds + starts, prints the URLs
 ```
 - Site: `http://localhost:$PORT`. Ghost admin is at `/ghost`; your first visit creates the owner account.
-- **Settings → Design → activate "recepees"** (one click, once).
-- Sign-in links land in mailpit at `http://localhost:$MAIL_UI_PORT`.
-- `theme/` is mounted live and `server.js` restarts on save. Run `make restart` after editing `ghost/routes.yaml`.
-
-Run `make` on its own to list every target:
+- **Settings → Design → activate "recepees"** (once).
+- Sign-in emails land in mailpit at `http://localhost:$MAIL_UI_PORT`.
+- `theme/` is mounted live (no asset caching in dev) and `server.js` restarts on save. Run `make restart` after editing `ghost/routes.yaml` or `theme/package.json`.
 
 | | |
 |---|---|
@@ -41,10 +78,10 @@ Run `make` on its own to list every target:
 | `make build` / `make prod` | build / run the production stack locally |
 | `make reset` | **delete** all dev data and start fresh (asks first) |
 
-`bun run dev` still works; it calls `make dev`.
+`bun run dev` also works; it calls `make dev`.
 
-## Settings (`.env`)
-Docker Compose reads `.env` for both stacks. In Coolify, set the same names as environment variables.
+## Settings
+Docker Compose reads `.env` for both stacks; in Coolify set the same names as environment variables.
 
 | Variable | Default | |
 |---|---|---|
@@ -53,85 +90,65 @@ Docker Compose reads `.env` for both stacks. In Coolify, set the same names as e
 | `FREE_AI_PER_MONTH` / `PAID_AI_PER_MONTH` | `5` / `200` | AI uses per member per month |
 | `SORT_FREE_PER_MONTH` / `SORT_PAID_PER_MONTH` | `3` / `30` | AI stock sorts per month (also count toward the allowance) |
 | `API_RATE_PER_MIN` | `120` | per-IP limit on `/api/*` |
-| `ADMIN_TOKEN` | `dev` | unlocks `/api/admin`. **Use a long random value in prod.** |
+| `ADMIN_TOKEN` | `dev` | unlocks `/api/admin`. **Use a long random value in production.** |
 | `OCR_LANGS` | `eng+fra` | Tesseract languages (installed: eng fra deu spa ita por nld; add more in `ocr/Dockerfile`) |
 | `PORT` / `MAIL_UI_PORT` | `3000` / `8026` | dev host ports |
 | `GHOST_VERSION` | `6` | dev Ghost image tag |
-| `PUBLIC_URL` | (empty) | prod: `https://your.domain` |
-| `MYSQL_PASSWORD` | (empty) | prod |
-| `MAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | mailpit in dev | prod needs real SMTP for member sign-in |
+| `PUBLIC_URL` | (empty) | production: `https://your.domain` |
+| `MYSQL_PASSWORD` | (empty) | production |
+| `MAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | mailpit in dev | production needs real SMTP for member sign-in |
 
-## Languages
-The UI is fully translated into **English, Español, Français, Português, Italiano and Deutsch**. Each visitor gets their own choice from the picker in the header. If they haven't picked one, it uses their browser language, then the site's publication language (Ghost → Settings → General), then English.
+**In Ghost admin → Settings → Design:** *Kitchen name* (default "My kitchen", translated; a custom name shows as typed) and *Palette* (the default colour theme).
+**In the admin center:** stock tags + icons, AI tagging mode (off / assign / assign and create), member usage and bonus AI uses.
 
-- **UI text** lives in `theme/assets/js/i18n.js`. The keys are the English text, so anything missing falls back to English. In templates, add `data-t` to an element; in JS, call `t('Text', { vars })`.
-- **AI output follows the visitor's language.** New tables, generated recipes and recognised stock come back in it.
-- **Translate → \<language\>** appears on any recipe written in a different language (metered as one AI use). Posts count as the site language unless the recipe JSON has `"lang": "fr"` (or another code).
-- **To add a language:** add it to `LANGS` and `D` in `i18n.js` and to `LANG_NAMES` in `server.js`.
-- **Ghost's own pieces** (the Portal signup popup and member emails) follow the site's publication language, because Ghost sets those per site, not per visitor.
-
-## My kitchen
-Each member's space: make tables, collections, stock, cook from stock. Rename it in **Ghost admin → Settings → Design → Kitchen name** (a theme custom setting); the default "My kitchen" is translated, a custom name shows as typed.
-
-- **Colour themes:** Enamel (follows system light/dark), Pastel, Summer and Night. The site default is **Ghost admin → Settings → Design → Palette**. Visitors switch with the swatch in the header (remembered in their browser); signed-in members also get it saved to their account (`PUT /api/prefs`).
-- **Collection settings** (⚙ on each collection): name, layout (3D stack, grid or list), cover recipe (front of the stack), hide from the kitchen, move left/right, delete.
-- **"All"** is a built-in collection that always holds every recipe: it can be hidden, re-laid-out and given a cover, but not renamed or deleted.
-- **Today's pick:** once a day the site makes one recipe from the member's stock (cached per day, free, logged as `daily` in analytics). Members can open it or claim a copy into their kitchen; it stays today's pick either way.
-- **Collections overview** (gear next to "My collections"): show/hide, layout and order for every collection at once. "New collection" opens an inline form (also inside a recipe's "Add to collection" menu).
-- **Ingredient explorer** (✦ Explore next to Add): tiles from the member's history (`GET /api/ingredients/history`) plus a 6-language catalog (`theme/assets/js/ingredients.js`); tap to add one, − to remove one. Counting an ingredient down to zero moves it to the trash (Undo or restore from the trash page).
-- **Print:** opens a picker that renders the real recipe as a page in every style (each colour theme + black & white); colour prints keep their colours.
-- **Collections:** every account starts with three, each pre-filled with default recipes (Favourites, Want to try, Weeknight dinners, named in the member's language). Members add, rename and delete their own. Any recipe table has an **Add to collection…** picker; a recipe can sit in several. In the kitchen each collection is a 3D stack: pass through with the arrows, a swipe or the arrow keys; click the front card to open it, a back card to bring it forward; **Open** fans the whole collection out.
-- **Stock tags** are global and admin-only: names in 6 languages plus an SVG icon (14 built in; paste any SVG, e.g. from SVGRepo). The admin picks the AI mode: *off*, *assign existing tags*, or *assign and create* (the AI names the new tag in all languages and draws its icon). Icons render as CSS masks in the theme colour, so pasted SVG can't run code; the server also rejects scripts, event handlers and links in icons.
-- **Trash:** deleting a collection or recipe moves it to the trash (a toast offers Undo). The trash page (`/my/trash/`, linked at the very bottom of the kitchen) restores items, a collection together with its recipes, or deletes them forever.
-- **Wording:** members only ever see "recipe"; "recipe table" is the format's name in the code, never in the UI.
-- **Bonus AI uses:** the admin can set a member's usage for the month or grant bonus uses, which are spent after the monthly allowance and carry over.
-
-## Publishing a recipe table
+## Publishing a recipe
 Write a normal Ghost post and add an **HTML card** containing:
 ```html
 <script type="application/recipe+json">{"title":"…","servings":4,"steps":[{"text":"Whisk","after":[],"uses":[{"name":"flour","amount":250,"unit":"g"}]}]}</script>
 ```
-`after` lists the earlier steps whose result this step uses (it defaults to the previous step). Steps with nothing to combine, like "preheat oven", appear above the table. The **Copy for Ghost** button in the recipe box produces this snippet for you. Set post access to *Paid members* to make a recipe Pro-only.
+`after` lists the earlier steps whose result this step uses (defaults to the previous step); steps with nothing to combine, like "preheat oven", appear above the table. Staff signed in to Ghost get a **Copy for Ghost** button on any recipe in their kitchen that produces this snippet. Set post access to *Paid members* for Pro-only recipes; add `"lang": "fr"` (etc.) if a recipe isn't in the site's language.
 
-## Accounts and subscriptions
-These are native Ghost features: Portal handles signup and sign-in. Plans live under **Settings → Membership → Tiers**, and **Connect Stripe** turns on paid plans. The API treats `free` as free and `paid`/`comped` as paid, then applies the monthly limits.
-
-## OCR
-Cookbook photos are OCR'd first. If the page has enough text (80+ characters), Claude gets that text instead of the image, which costs less and is usually more accurate on dense pages. Otherwise it falls back to Claude vision. **Just read the text (free)** in the recipe box runs OCR alone, doesn't count against the AI limit, and drops the result into the *Paste text* tab for editing. The OCR service has no public port and runs as many jobs at once as there are CPU cores (`OCR_CONCURRENCY`).
+## Languages
+- **UI text** lives in `theme/assets/js/i18n.js`; keys are the English text, so anything missing falls back to English. In templates add `data-t` to an element; in JS call `t('Text', { vars })`.
+- **AI output follows the visitor's language**; **Translate → \<language\>** converts any recipe (one AI use).
+- **To add a language:** add it to `LANGS` and `D` in `i18n.js`, `LANG_NAMES` in `server.js`, and a name column in `theme/assets/js/ingredients.js`.
+- Ghost's own Portal popup and member emails follow the site's publication language (Ghost → Settings → General).
 
 ## API
 | | |
 |---|---|
-| `GET /api/me` | member, plan, usage this month |
-| `GET/PUT /api/stock` | kitchen stock |
-| `GET/POST /api/recipes`, `DELETE /api/recipes/:id` | recipe box |
+| `GET /api/me`, `PUT /api/prefs` | member, plan, usage, preferences (colour theme) |
+| `GET/PUT /api/stock` | stock (items removed by a PUT go to the trash) |
+| `POST /api/stock/sort` | AI files untagged stock under tags (metered, per-plan cap) |
+| `GET /api/ingredients/history` | every ingredient the member's kitchen has seen |
+| `GET /api/tags` | stock tags + the AI tagging mode |
+| `GET/POST /api/recipes`, `DELETE /api/recipes/:id` | the member's recipes |
+| `GET/POST /api/collections`, `PATCH/DELETE /api/collections/:id` | collections (`all` is built in) |
+| `GET /api/daily`, `POST /api/daily/claim` | today's pick, claim a copy |
+| `GET/DELETE /api/trash`, `POST /api/trash/:id/restore`, `DELETE /api/trash/:id` | trash |
 | `POST /api/ocr` `{image}` | text from a photo (free) |
-| `POST /api/convert` `{url\|text\|image}` | create a recipe from a link, text or photo (AI, metered) |
+| `POST /api/convert` `{url\|text\|image}` | create a recipe (AI, metered) |
 | `POST /api/generate` `{ingredients, notes}` | recipe from stock (AI, metered) |
 | `POST /api/recognize` `{image}` | ingredients from a photo (AI, metered) |
 | `POST /api/translate` `{recipe, lang}` | translate a recipe (AI, metered) |
-| `GET/POST /api/collections`, `PATCH/DELETE /api/collections/:id` | the member's collections (3 starters on first visit) |
-| `GET /api/tags` | stock tags + the AI tagging mode |
-| `GET /api/daily`, `POST /api/daily/claim` | today's pick, claim a copy |
-| `GET /api/ingredients/history` | every ingredient the member's kitchen has seen |
-| `GET/DELETE /api/trash`, `POST /api/trash/:id/restore`, `DELETE /api/trash/:id` | the trash: list, empty, restore, delete forever |
-| `POST /api/stock/sort` | AI files untagged stock under tags (metered) |
-| `/api/admin` | **admin center** (Bearer `ADMIN_TOKEN`): analytics, edit usage and bonus AI uses per member, stock tags + icons, AI tagging mode |
+| `/api/admin`, `/api/admin/*` | admin center + its API (Bearer `ADMIN_TOKEN`) |
 | `GET /api/health` | healthcheck |
 
-Images are sent as `data:image/...;base64,` URLs. The AI endpoints take an optional `lang` (`en es fr pt it de`). Every endpoint except health and admin requires a signed-in member.
+Images are sent as `data:image/...;base64,` URLs. AI endpoints take an optional `lang` (`en es fr pt it de`). Everything except health and admin needs a signed-in member.
 
 ## Security
-- **Usage limits:** taking one AI use is a single SQL statement, so parallel requests can't go over the limit. A failed AI call gives the use back.
-- **Rate limiting:** per IP on `/api/*`. The IP is the hop added by your own proxy (Traefik), so clients can't spoof it.
-- **Pasted links:** only public http(s) addresses, re-checked on every redirect, with 15s timeouts.
-- **Headers:** `nosniff`, `SAMEORIGIN` and a referrer policy on everything; HSTS behind https; a strict CSP on API and admin responses. Ghost pages don't get a CSP, because Portal and Stripe load third-party scripts.
-- **Text on pages** is escaped, and recipe source links only allow http(s).
-- **Containers:** the OCR service and Ghost are internal only. The api and ocr containers run as non-root.
+- **Usage limits** are single SQL statements, so parallel requests can't overshoot; a failed AI call gives the use back.
+- **Rate limiting** per IP on `/api/*`, using the hop your own proxy (Traefik) adds, so clients can't spoof it.
+- **Pasted links:** public http(s) only, re-checked on every redirect, 15s timeouts.
+- **Headers:** `nosniff`, `SAMEORIGIN`, referrer policy everywhere; HSTS behind https; strict CSP on API and admin responses (Ghost pages skip it because Portal and Stripe load third-party scripts).
+- **SVG icons** render as CSS masks (they can't run code), and the server rejects scripts, event handlers and links in them.
+- **Containers:** OCR and Ghost are internal only; api and ocr run as non-root.
 
 ## Deploy (GitHub → Coolify)
-1. Push this repo to GitHub. In Coolify, add a **Docker Compose** resource from the repo using `docker-compose.prod.yml`.
-2. Give the **api** service your domain (port 3000). Set `PUBLIC_URL`, `MYSQL_PASSWORD`, `ADMIN_TOKEN`, `ANTHROPIC_API_KEY`, `SMTP_*` and `MAIL_FROM`.
-3. Deploy, then activate the theme once in Ghost admin. `Dockerfile.ghost` bakes the theme and `routes.yaml` into the Ghost image and re-copies them on every boot, so each redeploy ships theme changes.
+1. Push this repo to GitHub.
+2. In Coolify: **New resource → Docker Compose**, pick the repo, compose file `docker-compose.prod.yml`.
+3. Give the **api** service your domain (container port 3000). Nothing else needs a public port.
+4. Environment variables: `PUBLIC_URL` (the same domain, with `https://`), `MYSQL_PASSWORD`, `ADMIN_TOKEN` (long and random), `ANTHROPIC_API_KEY`, `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`; optionally the limits above.
+5. Deploy, open `/ghost` to create the owner account, then **Settings → Design → activate "recepees"** once. Connect Stripe under **Settings → Membership** for paid plans.
 
-Data lives in the `api-data` (SQLite), `ghost-content` and `db` volumes. Back those up.
+`Dockerfile.ghost` bakes the theme and `routes.yaml` into the Ghost image and re-copies them on every boot, so each redeploy ships theme changes. Data lives in the `api-data` (SQLite), `ghost-content` and `db` volumes: back those up.
