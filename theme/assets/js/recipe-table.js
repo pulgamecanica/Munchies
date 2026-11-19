@@ -75,17 +75,21 @@
       const ingCells = rows.map(({ u, n }, k) =>
         `<div class="rt-ing ${cls(u)}" style="grid-row:${k + 2};grid-column:1/${n.d + 1}">` +
         `<b>${esc(amount(u, f))}</b> ${esc(u.name)}${u.optional ? ` <small>${t('optional')}</small>` : ''}${cls(u) === 'miss' ? ` <small class="buy">· ${t('to buy')}</small>` : ''}</div>`).join('');
+      // Convergence as colour: steps deepen toward the final column; the last step is the dish.
+      const depth = (n) => Math.round(12 + 76 * (n.d - 1) / Math.max(1, cols - 1));
       const stepCells = cells.map((n) =>
-        `<button type="button" class="rt-step${done.has(n.i) ? ' done' : ''}" data-i="${n.i}" aria-pressed="${done.has(n.i)}" ` +
-        `style="grid-row:${n.r0 + 2}/${n.r1 + 2};grid-column:${n.d + 1}/${n.parent && n.parent.d ? n.parent.d + 1 : n.d + 2}">${esc(n.s.text)}</button>`).join('');
+        `<button type="button" class="rt-step${!n.parent ? ' dish' : depth(n) >= 50 ? ' deep' : ''}${done.has(n.i) ? ' done' : ''}" data-i="${n.i}" aria-pressed="${done.has(n.i)}" ` +
+        `style="--p:${depth(n)};` +
+        `grid-row:${n.r0 + 2}/${n.r1 + 2};grid-column:${n.d + 1}/${n.parent && n.parent.d ? n.parent.d + 1 : n.d + 2}">${esc(n.s.text)}</button>`).join('');
 
-      el.innerHTML = `
+      el.innerHTML = `${opts.head === false ? '' : `
         <div class="rt-head">
           ${recipe.emoji ? `<span class="rt-emoji" aria-hidden="true">${esc(recipe.emoji)}</span>` : ''}
           <div><h2>${esc(recipe.title)}</h2>
           <p class="meta">${[recipe.time && '⏱ ' + esc(recipe.time), srcName && `${t('from')} ${srcUrl ? `<a href="${esc(srcUrl)}" rel="noopener nofollow" target="_blank">${esc(srcName)}</a>` : esc(srcName)}`].filter(Boolean).join(' · ')}</p>
           ${recipe.description ? `<p>${esc(recipe.description)}</p>` : ''}</div>
-        </div>
+        </div>`}
+        <div class="rt-tray">
         <div class="rt-controls">
           <span class="seg" role="group" aria-label="${t('Scale')}">${[0.5, 1, 2].map((x) => `<button type="button" data-scale="${x}" class="${servings === base * x ? 'on' : ''}">${x === 0.5 ? '½' : x}×</button>`).join('')}</span>
           <label>${t('Servings')} <input type="number" min="1" max="99" value="${servings}" data-serv></label>
@@ -94,11 +98,12 @@
           <button type="button" class="btn" data-print>${t('Print')}</button>
         </div>
         ${prep.length ? `<ul class="rt-prep">${prep.map((n) => `<li>${esc(n.s.text)}</li>`).join('')}</ul>` : ''}
-        <div class="rt-scroll"><div class="rt" style="--cols:${cols};grid-template-columns:minmax(10rem,1.4fr) repeat(${cols},minmax(7.5rem,1fr))">
+        <div class="rt-scroll"><div class="rt" style="--cols:${cols}">
           <div class="rt-h" style="grid-column:1">${t('ingredients, in order')}</div>
           <div class="rt-h" style="grid-column:2/${cols + 2}">${t("read left to right, tap a step when it's done →")}</div>
           ${ingCells}${stepCells}
         </div></div>
+        </div>
         ${miss.length ? `<p class="rt-shop"><b>${t('Shopping list:')}</b> ${miss.map((u) => esc(u.name)).join(', ')}</p>` : stock ? `<p class="rt-shop ok">${t('You have everything for this one.')}</p>` : ''}
         ${recipe.notes ? `<p class="rt-note">💡 ${esc(recipe.notes)}</p>` : ''}`;
     };
@@ -156,9 +161,11 @@
         const res = await fetch('/api/recipes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(rec) });
         b.textContent = res.ok ? t('Saved ✓') : t('Could not save');
       } }, translateAction(r, show)] : [{ label: t('Save'), run: () => { window.location.hash = '#/portal/signup'; } }];
-      table = render(r, el, { actions: actions.filter(Boolean) });
+      table = render(r, el, { actions: actions.filter(Boolean), head: false });
       stockP.then((stock) => stock && table.redraw(stock));
     };
     show(recipe);
+    const spec = document.getElementById('spec');
+    if (spec && recipe.time && !spec.querySelector('[data-time]')) spec.insertAdjacentHTML('afterbegin', `<div data-time><dt>${esc(t('Time'))}</dt><dd>${esc(recipe.time)}</dd></div>`);
   });
 })();
