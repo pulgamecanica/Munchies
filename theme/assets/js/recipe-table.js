@@ -152,11 +152,11 @@
   /* Print dialog: the real recipe rendered as a page in every style (each theme + black & white).
      Small live renders to choose from, a large page preview of the choice; the page itself goes back to normal after printing. */
   const PALS = ['enamel', 'pastel', 'summer', 'night'];
-  const PAGE_W = 760; // previews render at this width, then scale down to fit
+  const PAGE_W = { portrait: 760, landscape: 1075 }; // previews render at A4 proportions at this width, then scale down to fit
   function pageMarkup(recipe) {
     const box = document.createElement('div');
     render(recipe, box, {});
-    box.querySelectorAll('.rt-controls, .rt-shop').forEach((x) => x.remove());
+    box.querySelectorAll('.rt-controls, .rt-shop, .rt-howto').forEach((x) => x.remove()); // exactly what prints
     // Previews sit inside clickable cards, and buttons can't nest: turn the step buttons into plain blocks.
     box.querySelectorAll('button').forEach((b) => { const d = document.createElement('div'); d.className = b.className; d.setAttribute('style', b.getAttribute('style') || ''); d.innerHTML = b.innerHTML; b.replaceWith(d); });
     return box.innerHTML;
@@ -166,8 +166,18 @@
     const names = { enamel: 'Enamel', pastel: 'Pastel', summer: 'Summer', night: 'Night', bw: 'Black & white' };
     const styles = [current, ...PALS.filter((x) => x !== current), 'bw'];
     const page = pageMarkup(recipe);
-    const paper = (style) => `<div class="paper${style === 'bw' ? ' bw' : ''}" ${style === 'bw' ? '' : `data-palette="${style}"`} aria-hidden="true"><div class="paper-in rt-wrap">${page}</div></div>`;
-    let chosen = current;
+    const pref = (k, d, ok) => { try { const v = localStorage.getItem('print-' + k); return ok.includes(v) ? v : d; } catch { return d; } };
+    let chosen = current, orient = pref('orient', 'portrait', ['portrait', 'landscape']), align = pref('align', 'left', ['left', 'center', 'justify']);
+    const paper = (style) => `<div class="paper ${orient}${style === 'bw' ? ' bw' : ''}" data-align="${align}" ${style === 'bw' ? '' : `data-palette="${style}"`} aria-hidden="true"><div class="paper-in rt-wrap">${page}</div></div>`;
+    const ICON = {
+      portrait: '<svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="1.5"/></svg>',
+      landscape: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1.5"/></svg>',
+      left: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg>',
+      center: '<svg viewBox="0 0 24 24"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></svg>',
+      justify: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>',
+    };
+    const seg = (name, value, opts) => `<div class="pd-seg" role="radiogroup" aria-label="${esc(t(name))}">${opts.map(([v, l]) =>
+      `<button type="button" role="radio" data-${name.toLowerCase()}="${v}" aria-checked="${v === value}" aria-label="${esc(t(l))}" title="${esc(t(l))}">${ICON[v]}</button>`).join('')}</div>`;
     const dlg = document.createElement('dialog');
     dlg.className = 'print-dlg';
     dlg.setAttribute('aria-label', t('Print'));
@@ -178,10 +188,21 @@
           ${styles.map((x) => `<button type="button" role="radio" class="pd-style" data-style="${x}" aria-checked="${x === chosen}">
             ${paper(x)}<span>${esc(t(names[x]))}${x === current ? ` <small>${esc(t('Current theme'))}</small>` : ''}</span></button>`).join('')}
         </div>
+        <div class="pd-opts">
+          <div class="pd-opt"><span>${esc(t('Orientation'))}</span>${seg('Orientation', orient, [['portrait', 'Portrait'], ['landscape', 'Landscape']])}</div>
+          <div class="pd-opt"><span>${esc(t('Text'))}</span>${seg('Text', align, [['left', 'Left'], ['center', 'Centered'], ['justify', 'Justified']])}</div>
+        </div>
         <div class="pd-actions"><button type="button" class="btn" data-cancel>${esc(t('Cancel'))}</button><button type="button" class="btn primary" data-go>${esc(t('Print'))}</button></div>
       </aside>`;
     document.body.append(dlg);
-    const fit = () => dlg.querySelectorAll('.paper').forEach((p) => p.style.setProperty('--s', p.clientWidth / PAGE_W));
+    const fit = () => dlg.querySelectorAll('.paper').forEach((p) => { p.style.setProperty('--pw', PAGE_W[orient] + 'px'); p.style.setProperty('--s', p.clientWidth / PAGE_W[orient]); });
+    const redraw = () => {
+      dlg.querySelectorAll('.pd-style').forEach((b) => b.querySelector('.paper').outerHTML = paper(b.dataset.style));
+      dlg.querySelector('.pd-stage').innerHTML = paper(chosen);
+      dlg.querySelectorAll('[data-orientation]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.orientation === orient)));
+      dlg.querySelectorAll('[data-text]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.text === align)));
+      fit();
+    };
     const pick = (style) => {
       chosen = style;
       dlg.querySelectorAll('.pd-style').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.style === style)));
@@ -190,6 +211,8 @@
     dlg.addEventListener('click', (e) => {
       if (e.target === dlg || e.target.closest('[data-cancel]')) return dlg.close();
       const b = e.target.closest('[data-style]'); if (b) return pick(b.dataset.style);
+      const o = e.target.closest('[data-orientation]'); if (o) { orient = o.dataset.orientation; try { localStorage.setItem('print-orient', orient); } catch {} return redraw(); }
+      const a = e.target.closest('[data-text]'); if (a) { align = a.dataset.text; try { localStorage.setItem('print-align', align); } catch {} return redraw(); }
       if (e.target.closest('[data-go]')) { dlg.returnValue = 'print'; dlg.close(); }
     });
     dlg.addEventListener('keydown', (e) => {
@@ -206,7 +229,11 @@
       if (!go) return;
       const before = root.dataset.palette;
       if (chosen === 'bw') root.dataset.print = 'bw'; else { root.dataset.print = 'color'; root.dataset.palette = chosen; }
-      const restore = () => { delete root.dataset.print; root.dataset.palette = before; window.removeEventListener('afterprint', restore); };
+      root.dataset.printAlign = align;
+      const page = document.createElement('style'); // orientation needs an @page rule
+      page.textContent = `@page { size: A4 ${orient}; margin: 12mm; }`;
+      document.head.append(page);
+      const restore = () => { delete root.dataset.print; delete root.dataset.printAlign; page.remove(); root.dataset.palette = before; window.removeEventListener('afterprint', restore); };
       window.addEventListener('afterprint', restore);
       setTimeout(() => window.print(), 50);
     });
