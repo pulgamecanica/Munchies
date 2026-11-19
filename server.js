@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Recepees gateway: the only public port.
-//   /api/*  -> our API (recipe box, stock, AI, usage, admin center)
+//   /api/*  -> our API (recipe box, stock, OCR, AI, usage, admin center)
 //   else    -> proxied to Ghost (theme, members, Portal, Stripe, /ghost admin)
 // Same origin = the Ghost member cookie reaches us, so we ask Ghost who's logged in.
 const http = require('http');
@@ -8,25 +8,66 @@ const fs = require('fs');
 const path = require('path');
 const dns = require('dns').promises;
 const net = require('net');
+const { DatabaseSync } = require('node:sqlite');
 
 const PORT = Number(process.env.PORT) || 3000;
 const GHOST = process.env.GHOST_URL || 'http://ghost:2368';
-const DATA = process.env.DATA_DIR || path.join(__dirname, 'data', 'members');
+const OCR = process.env.OCR_URL || 'http://ocr:8884';
+const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 const BASE = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const LIMITS = { free: Number(process.env.FREE_AI_PER_MONTH ?? 5), paid: Number(process.env.PAID_AI_PER_MONTH ?? 200) };
+const RATE = Number(process.env.API_RATE_PER_MIN) || 120;
+const OCR_MIN_CHARS = 80; // less text than this = probably not a recipe page, let Claude look at the image instead
+
+/* ---------- storage ---------- */
 fs.mkdirSync(DATA, { recursive: true });
+const db = new DatabaseSync(path.join(DATA, 'recepees.db'));
+db.exec(`
+  PRAGMA journal_mode = WAL;
+  PRAGMA busy_timeout = 3000;
+  CREATE TABLE IF NOT EXISTS members (uuid TEXT PRIMARY KEY, email TEXT, stock TEXT NOT NULL DEFAULT '[]', recipes TEXT NOT NULL DEFAULT '[]');
+  CREATE TABLE IF NOT EXISTS usage (uuid TEXT NOT NULL, month TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (uuid, month));
+`);
+let SEED = '[]';
+try { SEED = JSON.stringify(JSON.parse(fs.readFileSync(path.join(__dirname, 'seed-recipes.json'), 'utf8'))); } catch {}
 
-let SEED = [];
-try { SEED = JSON.parse(fs.readFileSync(path.join(__dirname, 'seed-recipes.json'), 'utf8')); } catch {}
+const q = {
+  upsert: db.prepare('INSERT INTO members (uuid, email, recipes) VALUES (?, ?, ?) ON CONFLICT(uuid) DO UPDATE SET email = excluded.email'),
+  get: db.prepare('SELECT stock, recipes FROM members WHERE uuid = ?'),
+  setStock: db.prepare('UPDATE members SET stock = ? WHERE uuid = ?'),
+  setRecipes: db.prepare('UPDATE members SET recipes = ? WHERE uuid = ?'),
+  used: db.prepare('SELECT used FROM usage WHERE uuid = ? AND month = ?'),
+  // Atomic: only counts when under the limit, so parallel requests can't overshoot.
+  take: db.prepare('INSERT INTO usage (uuid, month, used) VALUES (?, ?, 1) ON CONFLICT(uuid, month) DO UPDATE SET used = used + 1 WHERE used < ?'),
+  refund: db.prepare('UPDATE usage SET used = MAX(0, used - 1) WHERE uuid = ? AND month = ?'),
+  reset: db.prepare('UPDATE usage SET used = 0 WHERE uuid = ? AND month = ?'),
+  admin: db.prepare(`SELECT m.uuid, m.email, json_array_length(m.recipes) AS recipes, json_array_length(m.stock) AS stock, COALESCE(u.used, 0) AS used
+                     FROM members m LEFT JOIN usage u ON u.uuid = m.uuid AND u.month = ? ORDER BY used DESC, m.email`),
+};
+const month = () => new Date().toISOString().slice(0, 7);
+const tierOf = (m) => (m.status === 'free' ? 'free' : 'paid'); // paid + comped
+const usageOf = (m) => ({ month: month(), used: q.used.get(m.uuid, month())?.used || 0, limit: LIMITS[tierOf(m)], tier: tierOf(m) });
 
-const send = (res, status, body, type = 'application/json; charset=utf-8') => {
-  res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
-  res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
+async function withQuota(m, fn) {
+  const limit = LIMITS[tierOf(m)];
+  if (limit <= 0 || q.take.run(m.uuid, month(), limit).changes === 0) throw fail(402, `You've used all ${limit} AI uses this month. Upgrade for more.`);
+  try { return await fn(); } catch (e) { q.refund.run(m.uuid, month()); throw e; }
+}
+
+/* ---------- http helpers ---------- */
+const SECURITY = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-frame-options': 'SAMEORIGIN',
+  'permissions-policy': 'camera=(self), microphone=(), geolocation=()',
 };
 const fail = (status, message) => Object.assign(new Error(message), { status });
-
+const send = (res, status, body, type = 'application/json; charset=utf-8', extra = {}) => {
+  res.writeHead(status, { ...SECURITY, 'Content-Type': type, 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'", ...extra });
+  res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
+};
 const readBody = (req, limit = 15 * 1024 * 1024) => new Promise((resolve, reject) => {
   const chunks = []; let size = 0;
   req.on('data', (c) => {
@@ -41,41 +82,45 @@ const readBody = (req, limit = 15 * 1024 * 1024) => new Promise((resolve, reject
   req.on('error', reject);
 });
 
+// Client IP: the last X-Forwarded-For hop is the one our own proxy (Traefik) added; earlier hops are client-controlled.
+const clientIp = (req) => (req.headers['x-forwarded-for'] || '').split(',').pop().trim() || req.socket.remoteAddress;
+
+// ponytail: in-memory fixed window per IP, fine for one gateway instance; move to Redis if you run several.
+const hits = new Map();
+function rateLimited(req) {
+  const ip = clientIp(req), now = Date.now();
+  let h = hits.get(ip);
+  if (!h || h.reset < now) { if (hits.size > 50000) hits.clear(); h = { n: 0, reset: now + 60000 }; hits.set(ip, h); }
+  return ++h.n > RATE;
+}
+
 /* ---------- members ---------- */
-// ponytail: one Ghost round-trip per API call; cache by cookie if it ever shows up in latency.
+// 30s cache per cookie: one Ghost round-trip per half minute, not per request. Plan changes show up within 30s.
+const members = new Map();
 async function currentMember(req) {
-  if (!req.headers.cookie) return null;
+  const cookie = req.headers.cookie;
+  if (!cookie || !cookie.includes('ghost-members-ssr')) return null;
+  const hit = members.get(cookie);
+  if (hit && hit.exp > Date.now()) return hit.m;
   const r = await fetch(GHOST + '/members/api/member/', {
-    headers: { cookie: req.headers.cookie, host: req.headers.host || 'localhost', 'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http' },
+    headers: { cookie, host: req.headers.host || 'localhost', 'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http' },
   }).catch(() => null);
-  if (!r || !r.ok) return null;
-  const m = await r.json().catch(() => null);
-  return m && m.uuid ? m : null;
+  const data = r && r.ok ? await r.json().catch(() => null) : null;
+  const m = data && data.uuid ? data : null;
+  if (members.size > 20000) members.clear();
+  members.set(cookie, { m, exp: Date.now() + 30000 });
+  if (m) q.upsert.run(m.uuid, m.email, SEED);
+  return m;
 }
-const tierOf = (m) => (m.status === 'free' ? 'free' : 'paid'); // paid + comped
-const month = () => new Date().toISOString().slice(0, 7);
 
-// ponytail: one JSON file per member, fine for thousands; move to SQLite when admin listing gets slow.
-const fileOf = (uuid) => path.join(DATA, uuid.replace(/[^a-f0-9-]/gi, '') + '.json');
-function load(m) {
-  try { return JSON.parse(fs.readFileSync(fileOf(m.uuid), 'utf8')); }
-  catch { return { email: m.email, stock: [], recipes: SEED.map((r) => ({ ...r })), usage: {} }; }
-}
-function save(uuid, box) {
-  const f = fileOf(uuid);
-  fs.writeFileSync(f + '.tmp', JSON.stringify(box, null, 2));
-  fs.renameSync(f + '.tmp', f);
-}
-const usageOf = (m, box) => ({ month: month(), used: box.usage[month()] || 0, limit: LIMITS[tierOf(m)], tier: tierOf(m) });
-
-// Reserve one AI call before the (slow) request, refund if it fails. Sync = no race in one process.
-async function withQuota(m, fn) {
-  let box = load(m);
-  const u = usageOf(m, box);
-  if (u.used >= u.limit) throw fail(402, `You've used all ${u.limit} AI tables this month. Upgrade for more.`);
-  box.usage[u.month] = u.used + 1; box.email = m.email; save(m.uuid, box);
-  try { return await fn(); }
-  catch (e) { box = load(m); box.usage[u.month] = Math.max(0, (box.usage[u.month] || 1) - 1); save(m.uuid, box); throw e; }
+/* ---------- OCR ---------- */
+// Returns '' when OCR is down/busy/empty, callers fall back to Claude vision.
+async function ocr(image) {
+  const m = /^data:image\/(?:jpeg|png|webp|gif);base64,(.+)$/.exec(image || '');
+  if (!m) throw fail(400, 'Send a JPEG/PNG/WebP data URL as "image".');
+  const r = await fetch(OCR, { method: 'POST', body: Buffer.from(m[1], 'base64'), signal: AbortSignal.timeout(60000) }).catch(() => null);
+  const d = r && r.ok ? await r.json().catch(() => ({})) : {};
+  return (d.text || '').trim();
 }
 
 /* ---------- Claude ---------- */
@@ -143,62 +188,64 @@ async function fetchPage(raw) {
   throw fail(400, 'Too many redirects.');
 }
 
-/* ---------- admin center ---------- */
-function adminList() {
-  return fs.readdirSync(DATA).filter((f) => f.endsWith('.json')).map((f) => {
-    const b = JSON.parse(fs.readFileSync(path.join(DATA, f), 'utf8'));
-    return { uuid: f.slice(0, -5), email: b.email, recipes: b.recipes.length, stock: b.stock.length, usage: b.usage };
-  });
-}
-
 /* ---------- routes ---------- */
 async function api(req, res, p) {
   if (p === '/api/health') return send(res, 200, { ok: true });
+  if (rateLimited(req)) return send(res, 429, { error: 'Too many requests, slow down a little.' }, undefined, { 'Retry-After': '60' });
 
-  if (p === '/api/admin' || p === '/api/admin/') return send(res, 200, fs.readFileSync(path.join(__dirname, 'admin.html')), 'text/html; charset=utf-8');
+  if (p === '/api/admin' || p === '/api/admin/') {
+    return send(res, 200, fs.readFileSync(path.join(__dirname, 'admin.html')), 'text/html; charset=utf-8',
+      { 'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'" });
+  }
   if (p.startsWith('/api/admin/')) {
     if (!ADMIN_TOKEN || req.headers.authorization !== 'Bearer ' + ADMIN_TOKEN) throw fail(401, 'Bad admin token.');
-    if (p === '/api/admin/members' && req.method === 'GET') return send(res, 200, { month: month(), limits: LIMITS, members: adminList() });
-    const reset = /^\/api\/admin\/members\/([a-f0-9-]+)\/reset$/i.exec(p);
-    if (reset && req.method === 'POST') {
-      const box = JSON.parse(fs.readFileSync(fileOf(reset[1]), 'utf8'));
-      box.usage[month()] = 0; save(reset[1], box);
-      return send(res, 200, { ok: true });
+    if (p === '/api/admin/members' && req.method === 'GET') {
+      const mo = month();
+      return send(res, 200, { month: mo, limits: LIMITS, members: q.admin.all(mo).map((r) => ({ ...r, usage: { [mo]: r.used } })) });
     }
+    const reset = /^\/api\/admin\/members\/([a-f0-9-]+)\/reset$/i.exec(p);
+    if (reset && req.method === 'POST') { q.reset.run(reset[1], month()); return send(res, 200, { ok: true }); }
     throw fail(404, 'Not found');
   }
 
   const m = await currentMember(req);
   if (!m) throw fail(401, 'Sign in first.');
-  const box = load(m);
+  const row = q.get.get(m.uuid);
+  const stock = JSON.parse(row.stock), recipes = JSON.parse(row.recipes);
 
-  if (p === '/api/me') return send(res, 200, { member: { email: m.email, name: m.name, status: m.status }, usage: usageOf(m, box), ai: Boolean(process.env.ANTHROPIC_API_KEY) });
+  if (p === '/api/me') return send(res, 200, { member: { email: m.email, name: m.name, status: m.status }, usage: usageOf(m), ai: Boolean(process.env.ANTHROPIC_API_KEY) });
 
-  if (p === '/api/stock' && req.method === 'GET') return send(res, 200, box.stock);
+  if (p === '/api/stock' && req.method === 'GET') return send(res, 200, stock);
   if (p === '/api/stock' && req.method === 'PUT') {
-    const stock = await readBody(req);
-    if (!Array.isArray(stock)) throw fail(400, 'Stock must be an array');
-    box.stock = stock.slice(0, 500); box.email = m.email; save(m.uuid, box);
+    const next = await readBody(req, 512 * 1024);
+    if (!Array.isArray(next)) throw fail(400, 'Stock must be an array');
+    q.setStock.run(JSON.stringify(next.slice(0, 500)), m.uuid);
     return send(res, 200, { ok: true });
   }
 
-  if (p === '/api/recipes' && req.method === 'GET') return send(res, 200, box.recipes);
+  if (p === '/api/recipes' && req.method === 'GET') return send(res, 200, recipes);
   if (p === '/api/recipes' && req.method === 'POST') {
-    const r = await readBody(req);
+    const r = await readBody(req, 512 * 1024);
     if (!r.title || !Array.isArray(r.steps)) throw fail(400, 'Invalid recipe');
-    r.id = r.id || 'r' + Date.now().toString(36);
-    box.recipes = [...box.recipes.filter((x) => x.id !== r.id), r].slice(-1000); save(m.uuid, box);
+    r.id = String(r.id || 'r' + Date.now().toString(36)).slice(0, 80);
+    q.setRecipes.run(JSON.stringify([...recipes.filter((x) => x.id !== r.id), r].slice(-1000)), m.uuid);
     return send(res, 200, r);
   }
   if (p.startsWith('/api/recipes/') && req.method === 'DELETE') {
     const id = decodeURIComponent(p.split('/').pop());
-    box.recipes = box.recipes.filter((r) => r.id !== id); save(m.uuid, box);
+    q.setRecipes.run(JSON.stringify(recipes.filter((r) => r.id !== id)), m.uuid);
     return send(res, 200, { ok: true });
   }
 
   if (req.method !== 'POST') throw fail(404, 'Not found');
   const body = await readBody(req);
 
+  if (p === '/api/ocr') {
+    // Free (not metered): plain text from a photo, so anyone can edit it before making a table.
+    const text = await ocr(body.image);
+    if (!text) throw fail(422, 'Could not read any text in that photo.');
+    return send(res, 200, { text });
+  }
   if (p === '/api/recognize') {
     const img = imagePart(body.image);
     const items = await withQuota(m, async () => extractJson(await callClaude([img, { type: 'text', text: RECOGNIZE_PROMPT }], 'You identify food in photos for a kitchen stock tracker. Reply with JSON only.', 1200)).items);
@@ -213,10 +260,14 @@ async function api(req, res, p) {
     return send(res, 200, await withQuota(m, async () => asRecipe(await callClaude(prompt, RECIPE_SYSTEM), { generated: true })));
   }
   if (p === '/api/convert') {
-    // "Make a table": from a link, pasted text, or a photo of a cookbook page.
+    // "Make a table": from a link, pasted text, or a photo of a cookbook page (OCR first, vision as fallback).
     let content, source = {};
-    if (body.image) content = [imagePart(body.image), { type: 'text', text: 'Convert the recipe in this photo.\n' + RECIPE_SHAPE }];
-    else if (body.url) {
+    if (body.image) {
+      const text = await ocr(body.image);
+      content = text.length >= OCR_MIN_CHARS
+        ? `Convert this recipe. It was OCR'd from a cookbook photo, so fix obvious OCR mistakes.\n${RECIPE_SHAPE}\n\n${text.slice(0, 30000)}`
+        : [imagePart(body.image), { type: 'text', text: 'Convert the recipe in this photo.\n' + RECIPE_SHAPE }];
+    } else if (body.url) {
       const page = await fetchPage(String(body.url));
       source = { url: page.url };
       content = `Convert the recipe on this page (source ${page.url}).\n${RECIPE_SHAPE}\n\n${page.text.slice(0, 60000)}`;
@@ -233,16 +284,27 @@ async function api(req, res, p) {
 function proxy(req, res) {
   const headers = { ...req.headers, 'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http' };
   headers['x-forwarded-for'] = [req.headers['x-forwarded-for'], req.socket.remoteAddress].filter(Boolean).join(', ');
-  const up = http.request(GHOST + req.url, { method: req.method, headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+  const up = http.request(GHOST + req.url, { method: req.method, headers }, (r) => {
+    // ponytail: no CSP on Ghost pages (Portal, Stripe, admin load third-party scripts); add one per path if you lock it down.
+    const extra = headers['x-forwarded-proto'] === 'https' ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {};
+    res.writeHead(r.statusCode, { ...SECURITY, ...extra, ...r.headers });
+    r.pipe(res);
+  });
   up.on('error', () => { if (!res.headersSent) send(res, 502, 'Ghost is starting up, refresh in a few seconds.', 'text/plain'); else res.destroy(); });
   req.pipe(up);
 }
 
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
   const p = new URL(req.url, 'http://x').pathname;
   if (!p.startsWith('/api/')) return proxy(req, res);
   try { await api(req, res, p); }
-  catch (e) { send(res, e.status || 500, { error: e.message || 'Server error' }); }
-}).listen(PORT, '0.0.0.0', () => {
-  console.log(`Recepees gateway on :${PORT} -> Ghost ${GHOST} | AI ${process.env.ANTHROPIC_API_KEY ? 'on (' + MODEL + ')' : 'off'} | admin ${ADMIN_TOKEN ? 'on' : 'off (set ADMIN_TOKEN)'}`);
+  catch (e) { if (!res.headersSent) send(res, e.status || 500, { error: e.status ? e.message : 'Server error' }); if (!e.status) console.error(e); }
 });
+server.headersTimeout = 20000;
+server.requestTimeout = 120000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Recepees gateway on :${PORT} -> Ghost ${GHOST}, OCR ${OCR} | AI ${process.env.ANTHROPIC_API_KEY ? 'on (' + MODEL + ')' : 'off'} | admin ${ADMIN_TOKEN ? 'on' : 'off (set ADMIN_TOKEN)'}`);
+});
+const stop = () => server.close(() => { db.close(); process.exit(0); });
+process.on('SIGTERM', stop);
+process.on('SIGINT', stop);

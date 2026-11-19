@@ -75,9 +75,12 @@
         <div class="seg" role="tablist">${[['url', 'Link'], ['text', 'Paste text'], ['photo', 'Cookbook photo']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${S.mode === k}" class="${S.mode === k ? 'on' : ''}" data-mode="${k}">${l}</button>`).join('')}</div>
         <form id="convert" class="stack">
           ${S.mode === 'url' ? '<input name="url" type="url" required placeholder="https://a-recipe-blog.com/banana-bread" aria-label="Recipe link">' : ''}
-          ${S.mode === 'text' ? '<textarea name="text" rows="6" required placeholder="Paste the whole recipe here…" aria-label="Recipe text"></textarea>' : ''}
+          ${S.mode === 'text' ? `<textarea name="text" rows="${S.draft ? 14 : 6}" required placeholder="Paste the whole recipe here…" aria-label="Recipe text">${esc(S.draft || '')}</textarea>` : ''}
           ${S.mode === 'photo' ? '<input name="photo" type="file" accept="image/*" required aria-label="Cookbook page photo">' : ''}
-          <button class="btn primary" ${S.busy ? 'disabled' : ''}>${S.busy === 'convert' ? 'Building your table…' : 'Make my table →'}</button>
+          <div class="row">
+            <button class="btn primary" ${S.busy ? 'disabled' : ''}>${S.busy === 'convert' ? 'Building your table…' : 'Make my table →'}</button>
+            ${S.mode === 'photo' ? `<button class="btn" name="ocr" ${S.busy ? 'disabled' : ''}>${S.busy === 'ocr' ? 'Reading…' : 'Just read the text (free)'}</button>` : ''}
+          </div>
         </form>
       </section>
 
@@ -148,8 +151,16 @@
       const r = await ai('gen', () => api('/api/generate', { ingredients: S.stock.map((s) => s.name), notes: f.get('notes') }));
       if (r) open(r);
     }
+    if (e.target.id === 'convert' && e.submitter && e.submitter.name === 'ocr') {
+      // Free OCR: drop the text into the Paste tab so it can be fixed up before spending an AI use.
+      const image = await fileToDataUrl(f.get('photo'), 2400);
+      S.busy = 'ocr'; draw();
+      try { S.draft = (await api('/api/ocr', { image })).text; S.mode = 'text'; } catch (err) { say(err.message); }
+      S.busy = ''; draw();
+      return;
+    }
     if (e.target.id === 'convert') {
-      const body = S.mode === 'photo' ? { image: await fileToDataUrl(f.get('photo'), 2000) } : { [S.mode]: f.get(S.mode) };
+      const body = S.mode === 'photo' ? { image: await fileToDataUrl(f.get("photo"), 2400) } : { [S.mode]: f.get(S.mode) };
       const r = await ai('convert', () => api('/api/convert', body));
       if (r) open(r);
     }

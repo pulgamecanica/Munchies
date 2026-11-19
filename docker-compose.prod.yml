@@ -11,12 +11,21 @@ services:
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
       FREE_AI_PER_MONTH: ${FREE_AI_PER_MONTH:-5}
       PAID_AI_PER_MONTH: ${PAID_AI_PER_MONTH:-200}
+      API_RATE_PER_MIN: ${API_RATE_PER_MIN:-120}
     volumes: ["api-data:/app/data"]
     expose: ["3000"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
-    depends_on: [ghost]
+    depends_on: [ghost, ocr]
+
+  ocr:
+    build: ./ocr
+    restart: unless-stopped
+    environment:
+      OCR_LANGS: ${OCR_LANGS:-eng+fra}
+    expose: ["8884"]
+    deploy: { resources: { limits: { memory: 1g } } }
 
   ghost:
     build: { context: ., dockerfile: Dockerfile.ghost }

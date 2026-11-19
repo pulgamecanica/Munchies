@@ -12,7 +12,12 @@ services:
       GHOST_URL: http://ghost:2368
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev}
     volumes: [".:/app"]
-    depends_on: [ghost]
+    depends_on: [ghost, ocr]
+
+  ocr:
+    build: ./ocr
+    environment:
+      OCR_LANGS: ${OCR_LANGS:-eng+fra}
 
   ghost:
     image: ghost:${GHOST_VERSION:-6}-alpine
