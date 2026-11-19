@@ -4,13 +4,13 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Recepees Admin</title>
 <style>
-  :root {
+  :root { color-scheme: light;
     --bg: #f7f8f4; --card: #ffffff; --cell: #eef1f8; --line: #d9deec; --ink: #151a33; --muted: #5b6182;
     --accent: #1e3fd0; --accent-ink: #fff; --tomato: #ee3b24; --butter: #ffd43b;
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #12152b; --card: #1a1e3a; --cell: #232850; --line: #2f3566; --ink: #f2f0e6; --muted: #a3a8c8;
+    :root { color-scheme: dark; --bg: #12152b; --card: #1a1e3a; --cell: #232850; --line: #2f3566; --ink: #f2f0e6; --muted: #a3a8c8;
       --accent: #7d95ff; --accent-ink: #0e1126; --tomato: #ff5a3d;
       --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; }
   }
@@ -35,7 +35,14 @@
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
   th { color: var(--muted); font-weight: 600; font-size: 13px; }
   td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
-  td input[type=number] { width: 84px; text-align: right; }
+  /* number fields: our own − / + stepper instead of the browser's spinner arrows */
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .stepper { display: inline-flex; align-items: center; border: 2px solid var(--line); border-radius: 12px; background: var(--card); overflow: hidden; }
+  .stepper:focus-within { border-color: var(--accent); }
+  .stepper input { width: 56px; border: 0; border-radius: 0; background: none; padding: 7px 2px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stepper button { width: 32px; height: 36px; padding: 0; border: 0; border-radius: 0; background: var(--cell); font-size: 18px; line-height: 1; }
+  .stepper button:hover { background: var(--accent); color: var(--accent-ink); }
   /* KPI tiles */
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
   .tile { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 14px 16px; }
@@ -84,6 +91,7 @@
   const KINDS = [['convert', 'Create a recipe'], ['generate', 'Cook from stock'], ['recognize', 'Stock photo'], ['translate', 'Translate'], ['sort', 'Sort stock'], ['ocr', 'OCR (free)']];
   const LANGS = ['en', 'es', 'fr', 'pt', 'it', 'de'];
   const MODES = { off: 'Off: no AI tagging', assign: 'AI assigns existing tags', create: 'AI assigns and may create new tags (with icons)' };
+  const stepper = (name, v, label) => `<span class="stepper"><button type="button" data-step="-1" aria-label="${esc(label)}: one less">−</button><input type="number" min="0" inputmode="numeric" name="${name}" value="${v}" aria-label="${esc(label)}"><button type="button" data-step="1" aria-label="${esc(label)}: one more">+</button></span>`;
   const icon = (svg) => `<span class="ticon" aria-hidden="true" style="${esc(`--icon:url("data:image/svg+xml,${encodeURIComponent(svg)}")`)}"></span>`;
 
   function chart(st) {
@@ -163,8 +171,8 @@
             <thead><tr><th>Member</th><th class="n">Used in ${esc(mo)}</th><th class="n">Bonus left</th><th class="n">Recipes</th><th class="n">Stock</th><th></th></tr></thead>
             <tbody>${mem.members.map((m) => `<tr data-uuid="${esc(m.uuid)}">
               <td>${esc(m.email)}</td>
-              <td class="n"><input type="number" min="0" name="used" value="${m.used}" aria-label="AI uses this month for ${esc(m.email)}"></td>
-              <td class="n"><input type="number" min="0" name="bonus" value="${m.bonus || 0}" aria-label="Bonus uses for ${esc(m.email)}"></td>
+              <td class="n">${stepper('used', m.used, `AI uses this month for ${m.email}`)}</td>
+              <td class="n">${stepper('bonus', m.bonus || 0, `Bonus uses for ${m.email}`)}</td>
               <td class="n">${m.recipes}</td><td class="n">${m.stock}</td>
               <td class="row"><button data-give="50">+50 bonus</button><button class="primary" data-save>Save</button><button data-reset>Reset month</button></td>
             </tr>`).join('') || '<tr><td colspan="6" class="muted">No members have opened their kitchen yet.</td></tr>'}</tbody>
@@ -201,6 +209,7 @@
     try {
       if (tr) {
         const u = tr.dataset.uuid, val = (n) => tr.querySelector(`[name=${n}]`).value;
+        if (b.dataset.step) { const i = b.parentElement.querySelector('input'); i.value = Math.max(0, (Number(i.value) || 0) + Number(b.dataset.step)); return; }
         if (b.dataset.give) { tr.querySelector('[name=bonus]').value = Number(val('bonus')) + Number(b.dataset.give); return; }
         if ('save' in b.dataset) { await call('/api/admin/members/' + u, 'PATCH', { used: val('used'), bonus: val('bonus') }); say('Saved'); return load(); }
         if ('reset' in b.dataset) { await call(`/api/admin/members/${u}/reset`, 'POST'); say('Usage reset'); return load(); }
