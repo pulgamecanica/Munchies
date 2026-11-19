@@ -563,10 +563,11 @@ script[type="application/recipe+json"] { display: none; }
 .ht-table .rt-head h2 { font-size: 24px; }
 .ht-table .rt-emoji { font-size: 34px; }
 .ht-table .rt-step { pointer-events: none; }
-.ht-table .rt > * { transition: opacity .35s, box-shadow .35s, background-color .35s; }
+.ht-table .rt > * { transition: opacity .35s, outline-color .35s, background-color .35s; }
 .ht-table .rt.dim > *:not(.hl):not(.rt-h) { opacity: .28; }
-.ht-table .rt .hl { box-shadow: inset 0 0 0 3px var(--accent); }
-.ht-table .rt-step.dish.hl { box-shadow: inset 0 0 0 3px var(--ink); }
+/* outline (not an inset shadow): it covers the 1px grid line, so neighbouring highlights join with no gap */
+.ht-table .rt .hl { outline: 3px solid var(--accent); outline-offset: -2px; position: relative; z-index: 1; }
+.ht-table .rt-step.dish.hl { outline-color: var(--ink); }
 .ht-caption { margin: 0; padding: 16px 22px; min-height: 3.6em; font-size: clamp(16px, 1.8vw, 20px); line-height: 1.4; font-weight: 600; border-top: 2px solid var(--line); background: var(--card); }
 .ht-player.no-cc .ht-caption { visibility: hidden; min-height: 0; padding: 0; border: 0; }
 .ht-bar { padding: 10px 16px 14px; background: var(--accent); color: var(--accent-ink); }
