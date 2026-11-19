@@ -4,7 +4,7 @@
   const t = window.t;
   const lang = window.I18N.lang;
   const root = document.getElementById('box');
-  const S = { me: null, stock: [], recipes: [], found: null, mode: 'url', busy: '' };
+  const S = { me: null, stock: [], recipes: [], found: null, mode: 'url', busy: '', photo: null, scanning: [] };
   const uid = () => 'x' + Math.random().toString(36).slice(2, 10);
 
   async function api(path, body, method = body ? 'POST' : 'GET') {
@@ -60,6 +60,46 @@
     v.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  /* Photo drop zone: drag & drop, tap/click to browse, paste, or open the camera on phones.
+     The file input covers the whole zone, so it is keyboard-focusable and accepts native drops. */
+  const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.2-1.8A2 2 0 0 1 11 3.3h2a2 2 0 0 1 1.7.9L15.9 6h1.6A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.5"/></svg>';
+  const zone = (id, { title, hint, imgs = [], busy = '', multiple = false, small = false }) => `
+    <div class="drop${small ? ' sm' : ''}${imgs.length ? ' has' : ''}${busy ? ' busy' : ''}" data-zone="${id}">
+      ${imgs.length ? `
+        <img src="${imgs[0]}" alt="">
+        ${imgs.length > 1 ? `<span class="drop-count">+${imgs.length - 1}</span>` : ''}
+        <div class="scan" aria-hidden="true"></div>
+        <div class="drop-bar"><span>${esc(busy || t('Ready to read'))}</span>
+          ${busy ? '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>' : `<button type="button" class="drop-x" data-clear="${id}" aria-label="${esc(t('Remove photo'))}">✕</button>`}</div>`
+      : `
+        <div class="drop-icon">${ICON}</div>
+        <h3>${esc(title)}</h3>
+        <p>${esc(hint)}</p>
+        <div class="drop-btns"><label class="btn primary cam">${ICON}${esc(t('Take a photo'))}<input type="file" accept="image/*" capture="environment" ${multiple ? 'multiple' : ''} data-drop="${id}" hidden></label></div>`}
+      <input class="drop-input" type="file" accept="image/*" ${multiple ? 'multiple' : ''} data-drop="${id}" aria-label="${esc(title)}" ${busy ? 'disabled' : ''}>
+    </div>`;
+
+  function setPhoto(file) {
+    if (S.photo) URL.revokeObjectURL(S.photo.url);
+    S.photo = file ? { file, url: URL.createObjectURL(file) } : null;
+  }
+  async function scanStock(files) {
+    S.scanning = files.map((f) => URL.createObjectURL(f));
+    await ai('scan', async () => {
+      const all = [];
+      for (const f of files) all.push(...(await api('/api/recognize', { image: await fileToDataUrl(f), lang })).items);
+      S.found = all.map((it) => ({ ...it, pick: true }));
+      if (!all.length) say(t('No ingredients recognised. Try a closer photo.'));
+    });
+    S.scanning.forEach((u) => URL.revokeObjectURL(u)); S.scanning = []; draw();
+  }
+  function takeFiles(id, files) {
+    const imgs = [...files].filter((f) => f.type.startsWith('image/'));
+    if (!imgs.length || S.busy) return;
+    if (id === 'convert') { setPhoto(imgs[0]); S.mode = 'photo'; draw(); }
+    else scanStock(imgs);
+  }
+
   function draw() {
     const u = S.me.usage;
     const left = Math.max(0, u.limit - u.used);
@@ -79,7 +119,7 @@
         <form id="convert" class="stack">
           ${S.mode === 'url' ? '<input name="url" type="url" required placeholder="https://a-recipe-blog.com/banana-bread" aria-label="' + t('Recipe link') + '">' : ''}
           ${S.mode === 'text' ? `<textarea name="text" rows="${S.draft ? 14 : 6}" required placeholder="${t('Paste the whole recipe here…')}" aria-label="${t('Recipe text')}">${esc(S.draft || '')}</textarea>` : ''}
-          ${S.mode === 'photo' ? '<input name="photo" type="file" accept="image/*" required aria-label="' + t('Cookbook page photo') + '">' : ''}
+          ${S.mode === 'photo' ? zone('convert', { title: t('Photo of a cookbook page'), hint: t('Drop it here, tap to browse, or paste it'), imgs: S.photo ? [S.photo.url] : [], busy: S.busy === 'convert' ? t('Building your table…') : S.busy === 'ocr' ? t('Reading…') : '' }) : ''}
           <div class="row">
             <button class="btn primary" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'convert' ? 'Building your table…' : 'Make my table →')}</button>
             ${S.mode === 'photo' ? `<button class="btn" name="ocr" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'ocr' ? 'Reading…' : 'Just read the text (free)')}</button>` : ''}
@@ -101,8 +141,8 @@
 
       <section class="card">
         <h2>${t('My stock')}</h2>
-        <div class="row">
-          <label class="btn primary">${t(S.busy === 'scan' ? 'Recognising…' : '📷 Add by photo')}<input type="file" accept="image/*" capture="environment" multiple hidden data-scan ${S.busy ? 'disabled' : ''}></label>
+        ${zone('stock', { title: t('Snap your groceries or fridge'), hint: t('We spot every ingredient, you confirm.'), imgs: S.scanning, busy: S.busy === 'scan' ? t('Recognising…') : '', multiple: true, small: true })}
+        <div class="row add-row">
           <form id="add" class="row grow"><input name="name" placeholder="${t('Add an ingredient by hand…')}" aria-label="${t('Ingredient')}"><button class="btn">${t('Add')}</button></form>
         </div>
         ${S.found ? `<div class="found"><b>${t('Recognised: untick anything wrong')}</b>
@@ -125,9 +165,10 @@
   }
 
   root.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-mode],[data-open],[data-bump],[data-addfound],[data-dropfound]');
-    if (!t) return;
-    const d = t.dataset;
+    const el = e.target.closest('[data-mode],[data-open],[data-bump],[data-addfound],[data-dropfound],[data-clear]');
+    if (!el) return;
+    const d = el.dataset;
+    if (d.clear) { setPhoto(null); draw(); return; }
     if (d.mode) { S.mode = d.mode; draw(); }
     else if (d.open) open(S.recipes[Number(d.open)]);
     else if (d.bump) { const s = S.stock[Number(d.bump)]; s.qty = Math.max(0, s.qty + Number(d.d)); S.stock = S.stock.filter((x) => x.qty > 0); saveStock(); draw(); }
@@ -136,15 +177,7 @@
   });
   root.addEventListener('change', async (e) => {
     if (e.target.dataset.pick) S.found[Number(e.target.dataset.pick)].pick = e.target.checked;
-    if (e.target.hasAttribute('data-scan')) {
-      const files = [...e.target.files];
-      await ai('scan', async () => {
-        const all = [];
-        for (const f of files) all.push(...(await api('/api/recognize', { image: await fileToDataUrl(f), lang })).items);
-        S.found = all.map((it) => ({ ...it, pick: true }));
-        if (!all.length) say(t('No ingredients recognised. Try a closer photo.'));
-      });
-    }
+    if (e.target.dataset.drop) takeFiles(e.target.dataset.drop, e.target.files);
   });
   root.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -156,17 +189,28 @@
     }
     if (e.target.id === 'convert' && e.submitter && e.submitter.name === 'ocr') {
       // Free OCR: drop the text into the Paste tab so it can be fixed up before spending an AI use.
-      const image = await fileToDataUrl(f.get('photo'), 2400);
+      if (!S.photo) return say(t('Add a photo first.'));
+      const image = await fileToDataUrl(S.photo.file, 2400);
       S.busy = 'ocr'; draw();
-      try { S.draft = (await api('/api/ocr', { image })).text; S.mode = 'text'; } catch (err) { say(err.message); }
+      try { S.draft = (await api('/api/ocr', { image })).text; S.mode = 'text'; setPhoto(null); } catch (err) { say(err.message); }
       S.busy = ''; draw();
       return;
     }
     if (e.target.id === 'convert') {
-      const body = { lang, ...(S.mode === 'photo' ? { image: await fileToDataUrl(f.get('photo'), 2400) } : { [S.mode]: f.get(S.mode) }) };
+      if (S.mode === 'photo' && !S.photo) return say(t('Add a photo first.'));
+      const body = { lang, ...(S.mode === 'photo' ? { image: await fileToDataUrl(S.photo.file, 2400) } : { [S.mode]: f.get(S.mode) }) };
       const r = await ai('convert', () => api('/api/convert', body));
       if (r) open(r);
     }
+  });
+
+  // Drag highlight + paste an image from the clipboard anywhere on the page.
+  root.addEventListener('dragover', (e) => { const z = e.target.closest('.drop'); root.querySelectorAll('.drop.over').forEach((x) => x !== z && x.classList.remove('over')); if (z) z.classList.add('over'); });
+  root.addEventListener('dragleave', (e) => { const z = e.target.closest('.drop'); if (z && !z.contains(e.relatedTarget)) z.classList.remove('over'); });
+  root.addEventListener('drop', (e) => { const z = e.target.closest('.drop'); if (z) z.classList.remove('over'); });
+  document.addEventListener('paste', (e) => {
+    const files = [...(e.clipboardData?.files || [])];
+    if (files.length && !e.target.closest('input, textarea')) { e.preventDefault(); takeFiles('convert', files); }
   });
 
   function merge(items) {

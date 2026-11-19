@@ -33,6 +33,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Has usado todos tus usos de IA de este mes. Hazte Pro para más.', 'Too many requests, slow down a little.': 'Demasiadas solicitudes, ve un poco más despacio.',
       'Could not read any text in that photo.': 'No se pudo leer texto en esa foto.', 'That link is not reachable.': 'No se puede acceder a ese enlace.', 'Only http(s) links.': 'Solo enlaces http(s).',
       'Pick at least one ingredient.': 'Elige al menos un ingrediente.', 'The AI reply was not a valid recipe.': 'La respuesta de la IA no era una receta válida.', 'Request too large': 'La solicitud es demasiado grande',
+      'Photo of a cookbook page': 'Foto de una página de recetas', 'Drop it here, tap to browse, or paste it': 'Suéltala aquí, toca para buscar o pégala', 'Take a photo': 'Hacer una foto', 'Remove photo': 'Quitar foto', 'Ready to read': 'Lista para leer', 'Add a photo first.': 'Añade una foto primero.', 'Snap your groceries or fridge': 'Fotografía tu compra o tu nevera', 'We spot every ingredient, you confirm.': 'Detectamos cada ingrediente, tú confirmas.',
     },
     fr: {
       'Library': 'Bibliothèque', 'Recipe box': 'Mes recettes', 'Get Pro': 'Passer Pro', 'Account': 'Compte', 'Sign in': 'Connexion', 'Create account': 'Créer un compte', 'Language': 'Langue',
@@ -63,6 +64,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Vous avez utilisé toutes vos utilisations de l’IA ce mois-ci. Passez Pro pour en avoir plus.', 'Too many requests, slow down a little.': 'Trop de requêtes, ralentissez un peu.',
       'Could not read any text in that photo.': 'Aucun texte lisible sur cette photo.', 'That link is not reachable.': 'Ce lien est inaccessible.', 'Only http(s) links.': 'Liens http(s) uniquement.',
       'Pick at least one ingredient.': 'Choisissez au moins un ingrédient.', 'The AI reply was not a valid recipe.': 'La réponse de l’IA n’était pas une recette valide.', 'Request too large': 'Requête trop volumineuse',
+      'Photo of a cookbook page': 'Photo d’une page de recette', 'Drop it here, tap to browse, or paste it': 'Déposez-la ici, touchez pour parcourir ou collez-la', 'Take a photo': 'Prendre une photo', 'Remove photo': 'Retirer la photo', 'Ready to read': 'Prête à être lue', 'Add a photo first.': 'Ajoutez d’abord une photo.', 'Snap your groceries or fridge': 'Photographiez vos courses ou votre frigo', 'We spot every ingredient, you confirm.': 'On repère chaque ingrédient, vous confirmez.',
     },
     pt: {
       'Library': 'Biblioteca', 'Recipe box': 'Minhas receitas', 'Get Pro': 'Seja Pro', 'Account': 'Conta', 'Sign in': 'Entrar', 'Create account': 'Criar conta', 'Language': 'Idioma',
@@ -93,6 +95,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Já usou todos os usos de IA deste mês. Seja Pro para mais.', 'Too many requests, slow down a little.': 'Pedidos a mais, abrande um pouco.',
       'Could not read any text in that photo.': 'Não foi possível ler texto nessa foto.', 'That link is not reachable.': 'Não é possível aceder a esse link.', 'Only http(s) links.': 'Apenas links http(s).',
       'Pick at least one ingredient.': 'Escolha pelo menos um ingrediente.', 'The AI reply was not a valid recipe.': 'A resposta da IA não era uma receita válida.', 'Request too large': 'Pedido demasiado grande',
+      'Photo of a cookbook page': 'Foto de uma página de receitas', 'Drop it here, tap to browse, or paste it': 'Largue aqui, toque para procurar ou cole', 'Take a photo': 'Tirar uma foto', 'Remove photo': 'Remover foto', 'Ready to read': 'Pronta para ler', 'Add a photo first.': 'Adicione uma foto primeiro.', 'Snap your groceries or fridge': 'Fotografe as compras ou o frigorífico', 'We spot every ingredient, you confirm.': 'Encontramos cada ingrediente, você confirma.',
     },
     it: {
       'Library': 'Biblioteca', 'Recipe box': 'Le mie ricette', 'Get Pro': 'Passa a Pro', 'Account': 'Account', 'Sign in': 'Accedi', 'Create account': 'Crea account', 'Language': 'Lingua',
@@ -123,6 +126,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Hai usato tutti gli utilizzi IA di questo mese. Passa a Pro per averne di più.', 'Too many requests, slow down a little.': 'Troppe richieste, rallenta un po’.',
       'Could not read any text in that photo.': 'Nessun testo leggibile nella foto.', 'That link is not reachable.': 'Il link non è raggiungibile.', 'Only http(s) links.': 'Solo link http(s).',
       'Pick at least one ingredient.': 'Scegli almeno un ingrediente.', 'The AI reply was not a valid recipe.': 'La risposta dell’IA non era una ricetta valida.', 'Request too large': 'Richiesta troppo grande',
+      'Photo of a cookbook page': 'Foto di una pagina di ricette', 'Drop it here, tap to browse, or paste it': 'Trascinala qui, tocca per sfogliare o incollala', 'Take a photo': 'Scatta una foto', 'Remove photo': 'Rimuovi foto', 'Ready to read': 'Pronta da leggere', 'Add a photo first.': 'Aggiungi prima una foto.', 'Snap your groceries or fridge': 'Fotografa la spesa o il frigo', 'We spot every ingredient, you confirm.': 'Troviamo ogni ingrediente, tu confermi.',
     },
     de: {
       'Library': 'Bibliothek', 'Recipe box': 'Meine Rezepte', 'Get Pro': 'Pro holen', 'Account': 'Konto', 'Sign in': 'Anmelden', 'Create account': 'Konto erstellen', 'Language': 'Sprache',
@@ -153,6 +157,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Du hast alle KI-Nutzungen dieses Monats verbraucht. Mit Pro gibt’s mehr.', 'Too many requests, slow down a little.': 'Zu viele Anfragen, bitte etwas langsamer.',
       'Could not read any text in that photo.': 'Auf dem Foto war kein Text lesbar.', 'That link is not reachable.': 'Dieser Link ist nicht erreichbar.', 'Only http(s) links.': 'Nur http(s)-Links.',
       'Pick at least one ingredient.': 'Wähle mindestens eine Zutat.', 'The AI reply was not a valid recipe.': 'Die KI-Antwort war kein gültiges Rezept.', 'Request too large': 'Anfrage zu groß',
+      'Photo of a cookbook page': 'Foto einer Kochbuchseite', 'Drop it here, tap to browse, or paste it': 'Hier ablegen, zum Auswählen tippen oder einfügen', 'Take a photo': 'Foto aufnehmen', 'Remove photo': 'Foto entfernen', 'Ready to read': 'Bereit zum Lesen', 'Add a photo first.': 'Bitte zuerst ein Foto hinzufügen.', 'Snap your groceries or fridge': 'Fotografiere deinen Einkauf oder Kühlschrank', 'We spot every ingredient, you confirm.': 'Wir erkennen jede Zutat, du bestätigst.',
     },
   };
 
@@ -170,8 +175,13 @@
   // ponytail: server-rendered text flashes English for a frame before this runs; render per-language pages if that ever matters.
   document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.textContent.trim()); });
   document.querySelectorAll('select[data-lang]').forEach((sel) => {
-    sel.innerHTML = Object.entries(LANGS).map(([c, n]) => `<option value="${c}"${c === lang ? ' selected' : ''}>${n}</option>`).join('');
+    const short = matchMedia('(max-width: 720px)').matches; // phones: EN / ES / FR… so the header fits
+    sel.innerHTML = Object.entries(LANGS).map(([c, n]) => `<option value="${c}"${c === lang ? ' selected' : ''}>${short ? c.toUpperCase() : n}</option>`).join('');
     sel.setAttribute('aria-label', t('Language'));
     sel.onchange = () => { try { localStorage.setItem('lang', sel.value); } catch {} location.reload(); };
   });
+
+  // Mark the current section in the top nav and the phone tab bar.
+  const here = location.pathname.startsWith('/my/') ? '/my/' : '/';
+  document.querySelectorAll('[data-nav]').forEach((a) => { if (a.dataset.nav === here) a.setAttribute('aria-current', 'page'); });
 })();

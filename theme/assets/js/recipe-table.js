@@ -94,7 +94,7 @@
           <button type="button" class="btn" data-print>${t('Print')}</button>
         </div>
         ${prep.length ? `<ul class="rt-prep">${prep.map((n) => `<li>${esc(n.s.text)}</li>`).join('')}</ul>` : ''}
-        <div class="rt-scroll"><div class="rt" style="grid-template-columns:minmax(10rem,1.4fr) repeat(${cols},minmax(7.5rem,1fr))">
+        <div class="rt-scroll"><div class="rt" style="--cols:${cols};grid-template-columns:minmax(10rem,1.4fr) repeat(${cols},minmax(7.5rem,1fr))">
           <div class="rt-h" style="grid-column:1">${t('ingredients, in order')}</div>
           <div class="rt-h" style="grid-column:2/${cols + 2}">${t("read left to right, tap a step when it's done →")}</div>
           ${ingCells}${stepCells}
