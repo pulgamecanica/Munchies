@@ -2,6 +2,7 @@
 FROM node:24-alpine
 WORKDIR /app
 COPY server.js admin.html seed-recipes.json ./
+RUN mkdir -p data && chown node:node data
 ENV NODE_ENV=production
 USER node
 EXPOSE 3000
