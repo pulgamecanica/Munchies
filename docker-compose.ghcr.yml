@@ -1,0 +1,71 @@
+# Production from prebuilt images (made by the GitHub Release workflow) instead of building on the server.
+# Same variables as docker-compose.prod.yml, plus IMAGE_PREFIX and RECEPEES_VERSION.
+
+services:
+  api:
+    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-api:${RECEPEES_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      GHOST_URL: http://ghost:2368
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
+      FREE_AI_PER_MONTH: ${FREE_AI_PER_MONTH:-5}
+      PAID_AI_PER_MONTH: ${PAID_AI_PER_MONTH:-200}
+      SORT_FREE_PER_MONTH: ${SORT_FREE_PER_MONTH:-3}
+      SORT_PAID_PER_MONTH: ${SORT_PAID_PER_MONTH:-30}
+      API_RATE_PER_MIN: ${API_RATE_PER_MIN:-120}
+    volumes: ["api-data:/app/data"]
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+    depends_on: [ghost, ocr]
+
+  ocr:
+    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-ocr:${RECEPEES_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      OCR_LANGS: ${OCR_LANGS:-eng+fra}
+    expose: ["8884"]
+    deploy: { resources: { limits: { memory: 1g } } }
+
+  ghost:
+    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-ghost:${RECEPEES_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      url: ${PUBLIC_URL:?set PUBLIC_URL}
+      database__client: mysql
+      database__connection__host: db
+      database__connection__user: ghost
+      database__connection__password: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
+      database__connection__database: ghost
+      mail__transport: SMTP
+      mail__from: ${MAIL_FROM:-noreply@example.com}
+      mail__options__host: ${SMTP_HOST:-}
+      mail__options__port: ${SMTP_PORT:-587}
+      mail__options__secure: ${SMTP_SECURE:-false}
+      mail__options__auth__user: ${SMTP_USER:-}
+      mail__options__auth__pass: ${SMTP_PASS:-}
+    volumes: ["ghost-content:/var/lib/ghost/content"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-${MYSQL_PASSWORD}}
+      MYSQL_DATABASE: ghost
+      MYSQL_USER: ghost
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes: ["db:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 10s
+      retries: 12
+
+volumes:
+  api-data:
+  ghost-content:
+  db:

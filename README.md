@@ -149,6 +149,13 @@ Images are sent as `data:image/...;base64,` URLs. AI endpoints take an optional 
 - **SVG icons** render as CSS masks (they can't run code), and the server rejects scripts, event handlers and links in them.
 - **Containers:** OCR and Ghost are internal only; api and ocr run as non-root.
 
+## CI/CD and releases
+- **On every push / PR:** `.ci/check.sh` (JS syntax, gscan, API smoke test) on GitHub and Forgejo; GitHub also validates the compose files and builds all 3 images. Run the same checks locally with `make ci`.
+- **Releasing:** set `VERSION` and `RELEASE_NAME` at the top of the `Makefile`, commit, then `make release`. It syncs the package.json versions, makes an annotated tag `vX.Y.Z` and pushes it to every git remote.
+  - **GitHub** builds `linux/amd64` + `linux/arm64` images to GHCR (`ghcr.io/<owner>/<repo>-{api,ghost,ocr}`, tagged with the version and `latest`) and publishes a Release with notes and `recepees-theme.zip`.
+  - **Forgejo** publishes a Release with the source code as a zip. It uses the job token; if your instance restricts it, add a `RELEASE_TOKEN` secret. The runner label is `docker` (edit `.forgejo/workflows/*.yml` if yours differs).
+- **Prebuilt images:** `docker-compose.ghcr.yml` pulls the released images (set `RECEPEES_VERSION`, and `IMAGE_PREFIX` if the repo moves). The packages are private on GHCR by default: make them public, or log Coolify in to ghcr.io.
+
 ## Deploy (GitHub → Coolify)
 1. Push this repo to GitHub.
 2. In Coolify: **New resource → Docker Compose**, pick the repo, compose file `docker-compose.prod.yml`.

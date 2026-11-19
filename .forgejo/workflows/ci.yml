@@ -1,0 +1,17 @@
+# Forgejo Actions. Runner label: change `docker` if your runner uses another one.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: docker
+    container:
+      image: node:24-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checks
+        run: sh .ci/check.sh

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Checks
+        run: sh .ci/check.sh
+      - name: Compose files
+        env:
+          PUBLIC_URL: https://example.com
+          MYSQL_PASSWORD: ci
+          ADMIN_TOKEN: ci
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.prod.yml config -q
+          docker compose -f docker-compose.ghcr.yml config -q
+
+  build:
+    runs-on: ubuntu-latest
+    needs: check
+    strategy:
+      matrix:
+        include:
+          - { name: api, context: ., file: Dockerfile }
+          - { name: ghost, context: ., file: Dockerfile.ghost }
+          - { name: ocr, context: ocr, file: ocr/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
