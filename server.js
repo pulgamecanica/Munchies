@@ -19,6 +19,9 @@ const BASE = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const LIMITS = { free: Number(process.env.FREE_AI_PER_MONTH ?? 5), paid: Number(process.env.PAID_AI_PER_MONTH ?? 200) };
 const RATE = Number(process.env.API_RATE_PER_MIN) || 120;
+const LANG_NAMES = { en: 'English', es: 'Spanish', fr: 'French', pt: 'Portuguese', it: 'Italian', de: 'German' };
+const langOf = (l) => (LANG_NAMES[l] ? l : null);
+const writeIn = (l) => (langOf(l) ? `\nWrite every human-readable text value (title, description, tags, step texts, ingredient names, notes) in ${LANG_NAMES[l]}.` : '');
 const OCR_MIN_CHARS = 80; // less text than this = probably not a recipe page, let Claude look at the image instead
 
 /* ---------- storage ---------- */
@@ -52,7 +55,7 @@ const usageOf = (m) => ({ month: month(), used: q.used.get(m.uuid, month())?.use
 
 async function withQuota(m, fn) {
   const limit = LIMITS[tierOf(m)];
-  if (limit <= 0 || q.take.run(m.uuid, month(), limit).changes === 0) throw fail(402, `You've used all ${limit} AI uses this month. Upgrade for more.`);
+  if (limit <= 0 || q.take.run(m.uuid, month(), limit).changes === 0) throw fail(402, "You've used all your AI uses this month. Upgrade for more.");
   try { return await fn(); } catch (e) { q.refund.run(m.uuid, month()); throw e; }
 }
 
@@ -248,7 +251,8 @@ async function api(req, res, p) {
   }
   if (p === '/api/recognize') {
     const img = imagePart(body.image);
-    const items = await withQuota(m, async () => extractJson(await callClaude([img, { type: 'text', text: RECOGNIZE_PROMPT }], 'You identify food in photos for a kitchen stock tracker. Reply with JSON only.', 1200)).items);
+    const prompt = RECOGNIZE_PROMPT + (langOf(body.lang) ? ` Write names and notes in ${LANG_NAMES[body.lang]} instead of English.` : '');
+    const items = await withQuota(m, async () => extractJson(await callClaude([img, { type: 'text', text: prompt }], 'You identify food in photos for a kitchen stock tracker. Reply with JSON only.', 1200)).items);
     return send(res, 200, { items: Array.isArray(items) ? items : [] });
   }
   if (p === '/api/generate') {
@@ -256,8 +260,8 @@ async function api(req, res, p) {
     if (!ing.length) throw fail(400, 'Pick at least one ingredient.');
     const prompt = `Create one recipe using mainly these ingredients: ${ing.join(', ')}.\n` +
       (body.notes ? `Preferences: ${String(body.notes).slice(0, 500)}\n` : '') +
-      'Assume salt, pepper, oil and water are available; anything else not listed is optional or minimal.\n' + RECIPE_SHAPE;
-    return send(res, 200, await withQuota(m, async () => asRecipe(await callClaude(prompt, RECIPE_SYSTEM), { generated: true })));
+      'Assume salt, pepper, oil and water are available; anything else not listed is optional or minimal.\n' + RECIPE_SHAPE + writeIn(body.lang);
+    return send(res, 200, await withQuota(m, async () => asRecipe(await callClaude(prompt, RECIPE_SYSTEM), { generated: true, lang: langOf(body.lang) || undefined })));
   }
   if (p === '/api/convert') {
     // "Make a table": from a link, pasted text, or a photo of a cookbook page (OCR first, vision as fallback).
@@ -273,10 +277,21 @@ async function api(req, res, p) {
       content = `Convert the recipe on this page (source ${page.url}).\n${RECIPE_SHAPE}\n\n${page.text.slice(0, 60000)}`;
     } else if (body.text) content = `Convert this recipe.\n${RECIPE_SHAPE}\n\n${String(body.text).slice(0, 30000)}`;
     else throw fail(400, 'Send a url, text or image.');
+    const extra = writeIn(body.lang);
+    if (typeof content === 'string') content += extra; else content[1].text += extra;
     return send(res, 200, await withQuota(m, async () => {
-      const r = asRecipe(await callClaude(content, RECIPE_SYSTEM, 4000));
+      const r = asRecipe(await callClaude(content, RECIPE_SYSTEM, 4000), { lang: langOf(body.lang) || undefined });
       return { ...r, source: { ...(r.source || {}), ...source } };
     }));
+  }
+  if (p === '/api/translate') {
+    const r = body.recipe, l = langOf(body.lang);
+    if (!l) throw fail(400, 'Unsupported language.');
+    if (!r || !r.title || !Array.isArray(r.steps)) throw fail(400, 'Invalid recipe');
+    const { id, source, lang, ...text } = r;
+    const prompt = `Translate this recipe JSON into ${LANG_NAMES[l]}. Translate title, description, tags, every steps[].text, every steps[].uses[].name and notes. ` +
+      'Keep every other key, number, unit, emoji and the "after" arrays exactly as they are. Reply with the full JSON only.\n\n' + JSON.stringify(text).slice(0, 60000);
+    return send(res, 200, await withQuota(m, async () => ({ ...asRecipe(await callClaude(prompt, RECIPE_SYSTEM, 4000)), id: `${id || 'r'}-${l}`, source, lang: l })));
   }
   throw fail(404, 'Not found');
 }
@@ -303,9 +318,7 @@ const server = http.createServer(async (req, res) => {
 server.headersTimeout = 20000;
 server.requestTimeout = 120000;
 server.listen(PORT, '0.0.0.0', () => {
-  const site = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
-  console.log(`\n  Recepees is up -> open ${site}\n  Ghost admin ${site}/ghost | usage admin ${site}/api/admin`);
-  console.log(`  AI ${process.env.ANTHROPIC_API_KEY ? 'on (' + MODEL + ')' : 'off'} | admin token ${ADMIN_TOKEN ? 'set' : 'not set'} | internal: ghost=${GHOST} ocr=${OCR}\n`);
+  console.log(`Recepees gateway on :${PORT} -> Ghost ${GHOST}, OCR ${OCR} | AI ${process.env.ANTHROPIC_API_KEY ? 'on (' + MODEL + ')' : 'off'} | admin ${ADMIN_TOKEN ? 'on' : 'off (set ADMIN_TOKEN)'}`);
 });
 const stop = () => server.close(() => { db.close(); process.exit(0); });
 process.on('SIGTERM', stop);

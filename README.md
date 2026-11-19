@@ -60,6 +60,15 @@ Docker Compose reads `.env` for both stacks. In Coolify, set the same names as e
 | `MYSQL_PASSWORD` | (empty) | prod |
 | `MAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | mailpit in dev | prod needs real SMTP for member sign-in |
 
+## Languages
+The UI is fully translated into **English, Español, Français, Português, Italiano and Deutsch**. Each visitor gets their own choice from the picker in the header. If they haven't picked one, it uses their browser language, then the site's publication language (Ghost → Settings → General), then English.
+
+- **UI text** lives in `theme/assets/js/i18n.js`. The keys are the English text, so anything missing falls back to English. In templates, add `data-t` to an element; in JS, call `t('Text', { vars })`.
+- **AI output follows the visitor's language.** New tables, generated recipes and recognised stock come back in it.
+- **Translate → \<language\>** appears on any recipe written in a different language (metered as one AI use). Posts count as the site language unless the recipe JSON has `"lang": "fr"` (or another code).
+- **To add a language:** add it to `LANGS` and `D` in `i18n.js` and to `LANG_NAMES` in `server.js`.
+- **Ghost's own pieces** (the Portal signup popup and member emails) follow the site's publication language, because Ghost sets those per site, not per visitor.
+
 ## Publishing a recipe table
 Write a normal Ghost post and add an **HTML card** containing:
 ```html
@@ -83,10 +92,11 @@ Cookbook photos are OCR'd first. If the page has enough text (80+ characters), C
 | `POST /api/convert` `{url\|text\|image}` | make a table (AI, metered) |
 | `POST /api/generate` `{ingredients, notes}` | recipe from stock (AI, metered) |
 | `POST /api/recognize` `{image}` | ingredients from a photo (AI, metered) |
+| `POST /api/translate` `{recipe, lang}` | translate a recipe (AI, metered) |
 | `/api/admin` | **admin center**: usage per member, reset usage (Bearer `ADMIN_TOKEN`) |
 | `GET /api/health` | healthcheck |
 
-Images are sent as `data:image/...;base64,` URLs. Every endpoint except health and admin requires a signed-in member.
+Images are sent as `data:image/...;base64,` URLs. The AI endpoints take an optional `lang` (`en es fr pt it de`). Every endpoint except health and admin requires a signed-in member.
 
 ## Security
 - **Usage limits:** taking one AI use is a single SQL statement, so parallel requests can't go over the limit. A failed AI call gives the use back.
