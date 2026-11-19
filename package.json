@@ -1,0 +1,17 @@
+{
+  "name": "recepees",
+  "version": "1.0.0",
+  "description": "Local recipe app with stock tracking and AI recipe generation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "build": "node build.mjs"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
