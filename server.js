@@ -40,6 +40,7 @@ const memberCols = db.prepare('PRAGMA table_info(members)').all().map((c) => c.n
 if (!memberCols.includes('collections')) db.exec('ALTER TABLE members ADD COLUMN collections TEXT');
 if (!memberCols.includes('bonus')) db.exec('ALTER TABLE members ADD COLUMN bonus INTEGER NOT NULL DEFAULT 0'); // extra AI uses granted by the admin, spent after the monthly allowance
 if (!memberCols.includes('created')) db.exec('ALTER TABLE members ADD COLUMN created INTEGER');
+if (!memberCols.includes('prefs')) db.exec("ALTER TABLE members ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'"); // e.g. { palette: 'night' }
 // analytics: one counter per day and kind of action
 db.exec('CREATE TABLE IF NOT EXISTS events (day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind))');
 
@@ -77,6 +78,11 @@ const STARTER = {
   it: ['Preferite', 'Da provare', 'Cene veloci'], de: ['Favoriten', 'Ausprobieren', 'Schnelles Abendessen'],
 };
 const newId = (p) => p + Math.random().toString(36).slice(2, 9);
+const LAYOUTS = ['stack', 'grid', 'list'];
+const PALETTES = ['enamel', 'pastel', 'summer', 'night'];
+// Starter collections come pre-filled from the seed recipes (2 each, rotating), so nobody opens an empty kitchen.
+const seedFor = (k) => { const ids = SEED_IDS(); return ids.length ? [...new Set([ids[k % ids.length], ids[(k + 3) % ids.length]])] : []; };
+const SEED_IDS = () => JSON.parse(SEED).map((r) => r.id);
 let SEED = '[]';
 try { SEED = JSON.stringify(JSON.parse(fs.readFileSync(path.join(__dirname, 'seed-recipes.json'), 'utf8'))); } catch {}
 
@@ -90,6 +96,8 @@ const q = {
   setStock: db.prepare('UPDATE members SET stock = ? WHERE uuid = ?'),
   setRecipes: db.prepare('UPDATE members SET recipes = ? WHERE uuid = ?'),
   getCols: db.prepare('SELECT collections FROM members WHERE uuid = ?'),
+  getPrefs: db.prepare('SELECT prefs FROM members WHERE uuid = ?'),
+  setPrefs: db.prepare('UPDATE members SET prefs = ? WHERE uuid = ?'),
   setCols: db.prepare('UPDATE members SET collections = ? WHERE uuid = ?'),
   used: db.prepare('SELECT used FROM usage WHERE uuid = ? AND month = ?'),
   // Atomic: only counts when under the limit, so parallel requests can't overshoot.
@@ -156,6 +164,14 @@ function rateLimited(req) {
 }
 
 /* ---------- members ---------- */
+// Ghost staff (editors/admins) are signed in to /ghost on the same origin; only they get publishing helpers.
+async function isStaff(req) {
+  const cookie = req.headers.cookie || '';
+  if (!cookie.includes('ghost-admin-api-session')) return false;
+  const origin = `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers.host}`;
+  const r = await fetch(GHOST + '/ghost/api/admin/users/me/', { headers: { cookie, host: req.headers.host || 'localhost', origin, 'x-forwarded-proto': req.headers['x-forwarded-proto'] || 'http' } }).catch(() => null);
+  return Boolean(r && r.ok);
+}
 // 30s cache per cookie: one Ghost round-trip per half minute, not per request. Plan changes show up within 30s.
 const members = new Map();
 async function currentMember(req) {
@@ -318,7 +334,16 @@ async function api(req, res, p) {
   const row = q.get.get(m.uuid);
   const stock = JSON.parse(row.stock), recipes = JSON.parse(row.recipes);
 
-  if (p === '/api/me') return send(res, 200, { member: { email: m.email, name: m.name, status: m.status }, usage: usageOf(m), ai: Boolean(process.env.ANTHROPIC_API_KEY) });
+  if (p === '/api/me') {
+    return send(res, 200, { member: { email: m.email, name: m.name, status: m.status }, usage: usageOf(m), ai: Boolean(process.env.ANTHROPIC_API_KEY),
+      prefs: JSON.parse(q.getPrefs.get(m.uuid)?.prefs || '{}'), staff: await isStaff(req) });
+  }
+  if (p === '/api/prefs' && req.method === 'PUT') {
+    const b = await readBody(req, 4096), prefs = JSON.parse(q.getPrefs.get(m.uuid)?.prefs || '{}');
+    if (b.palette !== undefined) { if (!PALETTES.includes(b.palette)) throw fail(400, 'Unknown palette.'); prefs.palette = b.palette; }
+    q.setPrefs.run(JSON.stringify(prefs), m.uuid);
+    return send(res, 200, prefs);
+  }
 
   if (p === '/api/stock' && req.method === 'GET') return send(res, 200, stock);
   if (p === '/api/stock' && req.method === 'PUT') {
@@ -332,22 +357,47 @@ async function api(req, res, p) {
 
   // Collections: [{ id, name }]. A recipe lists the collections it's in as recipe.collections = [ids].
   let cols = JSON.parse(q.getCols.get(m.uuid)?.collections || 'null');
-  if (!cols) { cols = (STARTER[langOf(new URL(req.url, 'http://x').searchParams.get('lang'))] || STARTER.en).map((name) => ({ id: newId('c'), name })); q.setCols.run(JSON.stringify(cols), m.uuid); }
+  if (!cols) { cols = (STARTER[langOf(new URL(req.url, 'http://x').searchParams.get('lang'))] || STARTER.en).map((name) => ({ id: newId('c'), name, layout: 'stack', starter: true })); q.setCols.run(JSON.stringify(cols), m.uuid); }
+  if (cols.some((c, k) => k < 3 && !c.seeded)) {
+    // Fill each starter collection with default recipes once (also for accounts created before this existed).
+    const have = new Set(recipes.map((r) => r.id)), seed = JSON.parse(SEED);
+    cols = cols.map((c, k) => {
+      if (k >= 3 || c.seeded) return c;
+      const empty = !recipes.some((r) => (r.collections || []).includes(c.id));
+      if (empty) for (const id of seedFor(k)) {
+        if (!have.has(id)) { const sr = seed.find((x) => x.id === id); if (sr) { recipes.push({ ...sr }); have.add(id); } }
+        const r = recipes.find((x) => x.id === id);
+        if (r) r.collections = [...new Set([...(r.collections || []), c.id])];
+      }
+      return { ...c, seeded: true, cover: c.cover || seedFor(k)[0] || '' };
+    });
+    q.setCols.run(JSON.stringify(cols), m.uuid);
+    q.setRecipes.run(JSON.stringify(recipes), m.uuid);
+  }
   if (p === '/api/collections' && req.method === 'GET') return send(res, 200, cols);
   if (p === '/api/collections' && req.method === 'POST') {
     const name = String((await readBody(req, 4096)).name || '').trim().slice(0, 60);
     if (!name) throw fail(400, 'Give the collection a name.');
     if (cols.length >= 50) throw fail(400, 'That is the maximum number of collections.');
-    const c = { id: newId('c'), name };
+    const c = { id: newId('c'), name, layout: 'stack', seeded: true };
     q.setCols.run(JSON.stringify([...cols, c]), m.uuid);
     return send(res, 200, c);
   }
   const colM = /^\/api\/collections\/(c[a-z0-9]+)$/.exec(p);
   if (colM && req.method === 'PATCH') {
-    const name = String((await readBody(req, 4096)).name || '').trim().slice(0, 60);
-    if (!name) throw fail(400, 'Give the collection a name.');
-    q.setCols.run(JSON.stringify(cols.map((c) => (c.id === colM[1] ? { ...c, name } : c))), m.uuid);
-    return send(res, 200, { ok: true });
+    // Collection settings: name, layout (stack | grid | list), hidden, cover recipe, move (-1 / 1 to reorder).
+    const b = await readBody(req, 4096), i = cols.findIndex((c) => c.id === colM[1]);
+    if (i < 0) throw fail(404, 'Not found');
+    const c = { ...cols[i] };
+    if (b.name !== undefined) { c.name = String(b.name).trim().slice(0, 60); if (!c.name) throw fail(400, 'Give the collection a name.'); }
+    if (b.layout !== undefined) { if (!LAYOUTS.includes(b.layout)) throw fail(400, 'Unknown layout.'); c.layout = b.layout; }
+    if (b.hidden !== undefined) c.hidden = Boolean(b.hidden);
+    if (b.cover !== undefined) c.cover = recipes.some((r) => r.id === b.cover) ? b.cover : '';
+    cols[i] = c;
+    const j = i + (b.move === -1 ? -1 : b.move === 1 ? 1 : 0);
+    if (j !== i && j >= 0 && j < cols.length) [cols[i], cols[j]] = [cols[j], cols[i]];
+    q.setCols.run(JSON.stringify(cols), m.uuid);
+    return send(res, 200, cols);
   }
   if (colM && req.method === 'DELETE') {
     q.setCols.run(JSON.stringify(cols.filter((c) => c.id !== colM[1])), m.uuid);

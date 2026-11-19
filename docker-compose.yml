@@ -25,6 +25,7 @@ services:
     environment:
       url: ${PUBLIC_URL:-http://localhost:${PORT:-3000}}
       NODE_ENV: development
+      caching__theme__maxAge: 0          # dev: never serve a stale theme CSS/JS
       database__client: sqlite3
       database__connection__filename: /var/lib/ghost/content/data/ghost.db
       mail__transport: SMTP

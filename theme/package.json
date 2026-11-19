@@ -1,7 +1,7 @@
 {
   "name": "recepees",
   "description": "Recipe tables, a member recipe box and kitchen stock for Ghost.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "engines": {
     "ghost": ">=5.0.0"
@@ -33,6 +33,17 @@
         "type": "text",
         "default": "My kitchen",
         "description": "What members call their space: recipe collections, stock and AI tools."
+      },
+      "palette": {
+        "type": "select",
+        "options": [
+          "Enamel",
+          "Pastel",
+          "Summer",
+          "Night"
+        ],
+        "default": "Enamel",
+        "description": "Default colour theme. Visitors can switch in the header; members keep their choice."
       }
     }
   }

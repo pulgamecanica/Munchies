@@ -1,9 +1,14 @@
 <!DOCTYPE html>
-<html lang="{{@site.locale}}">
+<html lang="{{@site.locale}}" data-palette="{{#if @custom.palette}}{{@custom.palette}}{{else}}Enamel{{/if}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{meta_title}}</title>
+  <script>
+    // Colour theme before first paint: the visitor's choice, else the site default (Ghost design setting).
+    (function () { var r = document.documentElement; r.dataset.palette = r.dataset.palette.toLowerCase(); r.dataset.sitePalette = r.dataset.palette;
+      try { var p = localStorage.getItem('palette'); if (p) r.dataset.palette = p; } catch (e) {} })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap">
@@ -24,6 +29,15 @@
       {{else}}
         <a href="#" data-portal="signup" class="btn primary" data-t>Create account</a>
       {{/if}}
+      <details class="pal">
+        <summary aria-label="Colour theme"><span class="sw" aria-hidden="true"></span></summary>
+        <div class="pal-menu" role="group">
+          <button type="button" data-pal="enamel"><span class="sw enamel"></span><span data-t>Enamel</span></button>
+          <button type="button" data-pal="pastel"><span class="sw pastel"></span><span data-t>Pastel</span></button>
+          <button type="button" data-pal="summer"><span class="sw summer"></span><span data-t>Summer</span></button>
+          <button type="button" data-pal="night"><span class="sw night"></span><span data-t>Night</span></button>
+        </div>
+      </details>
       <select class="lang" data-lang aria-label="Language"></select>
     </div>
   </header>

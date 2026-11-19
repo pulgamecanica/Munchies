@@ -44,15 +44,15 @@
     const keep = (r) => { const i = S.recipes.findIndex((x) => x.id === r.id); if (i < 0) S.recipes.push(r); else S.recipes[i] = r; draw(); };
     render(recipe, v, { stock: S.stock, collections: collectionsFor(S.cols, keep), actions: [
       saved
-        ? { label: t('Delete'), run: async (r) => { if (!confirm(t('Delete this recipe?'))) return; await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; draw(); } }
+        ? { label: t('Remove from kitchen'), run: async (r) => { if (!confirm(t('Delete this recipe?'))) return; await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; draw(); } }
         : { label: t('Save'), primary: true, run: async (r) => { keep(await api('/api/recipes', r)); say(t('Saved ✓')); open(r); } },
       translateAction(recipe, (tr) => { S.me.usage.used++; draw(); open(tr); }),
-      { label: t('I cooked it'), run: (r) => {
+      { label: t('Cooked it: use up stock'), run: (r) => {
         const used = r.steps.flatMap((s) => s.uses || []);
         S.stock = S.stock.map((it) => (used.some((u) => findStock([it], u.name)) ? { ...it, qty: Math.max(0, it.qty - 1) } : it)).filter((it) => it.qty > 0);
         saveStock(); say(t('Took one of each from your stock')); draw();
       } },
-      { label: t('Copy for Ghost'), run: async (r, b) => {
+      S.me.staff && { label: t('Copy for Ghost'), run: async (r, b) => {
         // Staff: paste into an HTML card in a Ghost post to publish this table.
         await navigator.clipboard.writeText(`<script type="application/recipe+json">${JSON.stringify(r).replace(/</g, '\\u003c')}</script>`).catch(() => {});
         b.textContent = t('Copied ✓');
@@ -101,23 +101,35 @@
     else scanStock(imgs);
   }
 
-  /* Collections as 3D stacks: cards recede in Z, 4 visible. Pass through with arrows/swipe/keys, click the top card to open it,
-     "Open" fans the whole collection out into a grid. Passing only updates --i on existing cards, so CSS animates the move. */
+  /* Collections. Each has settings: layout (3D stack, grid or list), a cover recipe (front of the stack), hidden, order.
+     Stacks: cards recede in Z, 4 visible; pass through with arrows/swipe/keys, click the front card to open it,
+     "Open" fans the collection out. Passing only updates --i on existing cards, so CSS animates the move. */
   const VISIBLE = 4;
   const groups = () => {
-    const g = S.cols.map((c) => ({ id: c.id, name: c.name, own: true, recipes: S.recipes.filter((r) => (r.collections || []).includes(c.id)) }));
+    const g = S.cols.map((c, k) => {
+      const rs = S.recipes.filter((r) => (r.collections || []).includes(c.id));
+      const cover = rs.findIndex((r) => r.id === c.cover);
+      if (cover > 0) rs.unshift(...rs.splice(cover, 1));
+      return { ...c, k, own: true, layout: c.layout || 'stack', recipes: rs };
+    });
     const loose = S.recipes.filter((r) => !(r.collections || []).length);
-    return loose.length ? [...g, { id: 'unsorted', name: t('Unsorted'), recipes: loose }] : g;
+    return loose.length ? [...g, { id: 'unsorted', name: t('Unsorted'), layout: 'list', recipes: loose }] : g;
   };
   const missingOf = (r) => r.steps.flatMap((s) => s.uses || []).filter((x) => !x.optional && !window.RecipeTable.isStaple(x.name) && !findStock(S.stock, x.name)).length;
   const posOf = (k, n, rot) => ((k - rot) % n + n) % n;
-  const cardFace = (r) => { const m = missingOf(r); return `
+  const badge = (r) => { const m = missingOf(r); return `<span class="badge ${m ? 'warn' : 'ok'}">${m ? t('Missing {n}', { n: m }) : t('You have everything')}</span>`; };
+  const cardFace = (r) => `
     <span class="scard-emoji" aria-hidden="true">${esc(r.emoji || '🍽️')}</span>
     <span class="scard-title">${esc(r.title)}</span>
-    <span class="badge ${m ? 'warn' : 'ok'}">${m ? t('Missing {n}', { n: m }) : t('You have everything')}</span>`; };
+    ${badge(r)}`;
+  const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+  const head = (g) => `
+    <div class="col-title"><h3>${esc(g.name)}</h3><small>${esc(g.recipes.length === 1 ? t('1 recipe') : t('{n} recipes', { n: g.recipes.length }))}</small></div>`;
+  const gearBtn = (g) => (g.own ? `<button type="button" class="icon-btn gear" data-settings="${esc(g.id)}" aria-label="${esc(t('Collection settings'))}: ${esc(g.name)}" aria-expanded="${S.settings === g.id}">${GEAR}</button>` : '');
+
   function stackHTML(g) {
-    const n = g.recipes.length, rot = S.rot[g.id] || 0;
-    const cards = g.recipes.slice(0, 12).map((r, k) => { const i = posOf(k, Math.min(n, 12), rot); return `
+    const n = Math.min(g.recipes.length, 12), rot = S.rot[g.id] || 0;
+    const cards = g.recipes.slice(0, 12).map((r, k) => { const i = posOf(k, n, rot); return `
       <button type="button" class="scard" data-rid="${esc(r.id)}" style="--i:${i}"${i ? ' tabindex="-1" aria-hidden="true"' : ''}${i >= VISIBLE ? ' data-far' : ''}>${cardFace(r)}</button>`; }).join('');
     return `
       <article class="cstack${n ? '' : ' is-empty'}" data-stack="${esc(g.id)}">
@@ -125,13 +137,53 @@
           ${cards || `<div class="scard ghost" style="--i:0"><span>${esc(t('Nothing here yet. Use "Add to collection" on any recipe table.'))}</span></div><div class="scard ghost" style="--i:1"></div><div class="scard ghost" style="--i:2"></div>`}
         </div>
         <footer class="stack-foot">
-          <div><h3>${esc(g.name)}</h3><small>${esc(t('{n} recipes', { n }))}</small></div>
+          ${head(g)}
           <div class="stack-nav">
             ${n > 1 ? `<button type="button" class="icon-btn" data-pass="-1" aria-label="${esc(t('Previous'))}">‹</button><button type="button" class="icon-btn" data-pass="1" aria-label="${esc(t('Next'))}">›</button>` : ''}
             ${n ? `<button type="button" class="btn" data-expand>${esc(t('Open'))}</button>` : ''}
+            ${gearBtn(g)}
           </div>
         </footer>
       </article>`;
+  }
+  function blockHTML(g) {
+    // Grid and list layouts take the full width.
+    const body = !g.recipes.length ? `<p class="empty">${esc(t('Nothing here yet. Use "Add to collection" on any recipe table.'))}</p>`
+      : g.layout === 'grid'
+        ? `<div class="grid">${g.recipes.map((r) => `<button type="button" class="card post-card mini" data-rid="${esc(r.id)}">${cardFace(r)}</button>`).join('')}</div>`
+        : `<ul class="rlist">${g.recipes.map((r) => `<li><button type="button" data-rid="${esc(r.id)}"><span class="scard-emoji" aria-hidden="true">${esc(r.emoji || '🍽️')}</span><span class="rlist-title">${esc(r.title)}</span>${r.time ? `<small>${esc(r.time)}</small>` : ''}${badge(r)}</button></li>`).join('')}</ul>`;
+    return `<article class="col-block" data-block="${esc(g.id)}"><header class="col-block-head">${head(g)}${gearBtn(g)}</header>${body}</article>`;
+  }
+  function settingsHTML() {
+    const g = groups().find((x) => x.id === S.settings);
+    if (!g) return '';
+    const i = S.cols.findIndex((c) => c.id === g.id);
+    return `
+      <form class="col-settings" id="col-settings" data-col="${esc(g.id)}">
+        <div class="col-settings-head"><h3>${esc(t('Collection settings'))}</h3><button type="button" class="btn primary" data-settings-done>${esc(t('Done'))}</button></div>
+        <label class="field"><span>${esc(t('Collection name'))}</span><input name="name" value="${esc(g.name)}" maxlength="60" required></label>
+        <fieldset class="field"><legend>${esc(t('Layout'))}</legend>
+          <div class="seg">${[['stack', 'Stack'], ['grid', 'Grid'], ['list', 'List']].map(([v, l]) => `<label class="${g.layout === v ? 'on' : ''}"><input type="radio" name="layout" value="${v}" ${g.layout === v ? 'checked' : ''}>${esc(t(l))}</label>`).join('')}</div>
+        </fieldset>
+        <label class="field"><span>${esc(t('Cover recipe'))}</span>
+          <select name="cover">${g.recipes.map((r) => `<option value="${esc(r.id)}" ${g.recipes[0] && g.recipes[0].id === r.id ? 'selected' : ''}>${esc(r.title)}</option>`).join('') || `<option value="">-</option>`}</select></label>
+        <label class="check"><input type="checkbox" name="hidden" ${g.hidden ? 'checked' : ''}> ${esc(t('Hide from my kitchen'))}</label>
+        <div class="row col-settings-foot">
+          <button type="button" class="btn" data-move="-1" ${i <= 0 ? 'disabled' : ''}>‹ ${esc(t('Move left'))}</button>
+          <button type="button" class="btn" data-move="1" ${i >= S.cols.length - 1 ? 'disabled' : ''}>${esc(t('Move right'))} ›</button>
+          <button type="button" class="btn danger" data-delcol>${esc(t('Delete collection'))}</button>
+        </div>
+      </form>`;
+  }
+  function collectionsHTML() {
+    const all = groups(), shown = all.filter((g) => !g.hidden || S.showHidden), hidden = all.filter((g) => g.hidden);
+    const stacks = shown.filter((g) => g.layout === 'stack'), blocks = shown.filter((g) => g.layout !== 'stack');
+    return `
+      ${stacks.length ? `<div class="stacks">${stacks.map(stackHTML).join('')}</div>` : ''}
+      ${settingsHTML()}
+      ${expandedHTML()}
+      ${blocks.map(blockHTML).join('')}
+      ${hidden.length ? `<button type="button" class="link-btn" data-showhidden>${esc(t(S.showHidden ? 'Hide hidden collections' : 'Show hidden collections ({n})', { n: hidden.length }))}</button>` : ''}`;
   }
   function pass(id, dir) {
     const el = root.querySelector(`[data-stack="${CSS.escape(id)}"]`);
@@ -152,14 +204,15 @@
     return `
       <div class="col-open" id="col-open">
         <div class="col-open-head">
-          <h3>${esc(g.name)} <small>${esc(t('{n} recipes', { n: g.recipes.length }))}</small></h3>
-          <div class="row">
-            ${g.own ? `<button type="button" class="btn" data-rename>${esc(t('Rename'))}</button><button type="button" class="btn" data-delcol>${esc(t('Delete'))}</button>` : ''}
-            <button type="button" class="btn primary" data-close>${esc(t('Close'))}</button>
-          </div>
+          ${head(g)}
+          <div class="row">${gearBtn(g)}<button type="button" class="btn primary" data-close>${esc(t('Close'))}</button></div>
         </div>
-        <div class="grid fan">${g.recipes.map((r, k) => `<button type="button" class="card post-card" data-rid="${esc(r.id)}" style="--k:${k}">${cardFace(r)}</button>`).join('')}</div>
+        <div class="grid fan">${g.recipes.map((r, k) => `<button type="button" class="card post-card mini" data-rid="${esc(r.id)}" style="--k:${k}">${cardFace(r)}</button>`).join('')}</div>
       </div>`;
+  }
+  async function patchCol(id, body) {
+    try { S.cols = await api('/api/collections/' + id, body, 'PATCH'); draw(); }
+    catch (x) { say(x.message); }
   }
 
   /* Stock grouped under the admin's tags. Icons are drawn as CSS masks so they take the text colour and never run code. */
@@ -204,7 +257,7 @@
           ${S.mode === 'photo' ? zone('convert', { title: t('Photo of a cookbook page'), hint: t('Drop it here, tap to browse, or paste it'), imgs: S.photo ? [S.photo.url] : [], busy: S.busy === 'convert' ? t('Building your table…') : S.busy === 'ocr' ? t('Reading…') : '' }) : ''}
           <div class="row">
             <button class="btn primary" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'convert' ? 'Building your table…' : 'Make my table →')}</button>
-            ${S.mode === 'photo' ? `<button class="btn" name="ocr" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'ocr' ? 'Reading…' : 'Just read the text (free)')}</button>` : ''}
+            ${S.mode === 'photo' ? `<button class="btn" name="ocr" ${S.busy ? 'disabled' : ''}>${t(S.busy === 'ocr' ? 'Reading…' : 'Extract text only (free)')}</button>` : ''}
           </div>
         </form>
       </section>
@@ -216,8 +269,7 @@
           <h2>${t('My collections')} <small>${S.cols.length}</small></h2>
           <button type="button" class="btn" data-newcol>+ ${esc(t('New collection'))}</button>
         </div>
-        <div class="stacks">${groups().map(stackHTML).join('')}</div>
-        ${expandedHTML()}
+        ${collectionsHTML()}
       </section>
 
       <section class="card">
@@ -247,7 +299,7 @@
 
   root.addEventListener('click', (e) => {
     if (swiped) { swiped = false; return; }
-    const el = e.target.closest('[data-mode],[data-open],[data-bump],[data-addfound],[data-dropfound],[data-clear],[data-rid],[data-pass],[data-expand],[data-close],[data-newcol],[data-rename],[data-delcol],[data-sort]');
+    const el = e.target.closest('[data-mode],[data-bump],[data-addfound],[data-dropfound],[data-clear],[data-rid],[data-pass],[data-expand],[data-close],[data-newcol],[data-settings],[data-settings-done],[data-move],[data-showhidden],[data-delcol],[data-sort]');
     if (!el) return;
     const d = el.dataset;
     const stack = el.closest('[data-stack]');
@@ -255,26 +307,27 @@
     if (d.pass) return pass(stack.dataset.stack, Number(d.pass));
     if (d.rid) {
       // In a stack, the front card opens; a card further back comes to the front first.
-      if (stack && el.style.getPropertyValue('--i').trim() !== '0') return pass(stack.dataset.stack, Number(el.style.getPropertyValue('--i')));
+      if (stack && el.classList.contains('scard') && el.style.getPropertyValue('--i').trim() !== '0') return pass(stack.dataset.stack, Number(el.style.getPropertyValue('--i')));
       return open(S.recipes.find((r) => r.id === d.rid));
     }
-    if ('expand' in d) { S.openCol = stack.dataset.stack; draw(); return root.querySelector('#col-open').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    if ('expand' in d) { S.openCol = S.openCol === stack.dataset.stack ? null : stack.dataset.stack; draw(); return root.querySelector('#col-open').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
     if ('close' in d) { S.openCol = null; return draw(); }
-    if ('newcol' in d || 'rename' in d) {
-      const cur = S.cols.find((c) => c.id === S.openCol);
-      const name = (prompt(t('Collection name'), 'rename' in d && cur ? cur.name : '') || '').trim();
-      if (!name) return;
-      if ('rename' in d) { api('/api/collections/' + cur.id, { name }, 'PATCH').then(() => { cur.name = name; draw(); }).catch((x) => say(x.message)); }
-      else api('/api/collections', { name }).then((c) => { S.cols.push(c); draw(); }).catch((x) => say(x.message));
+    if ('newcol' in d) {
+      const name = (prompt(t('Collection name')) || '').trim();
+      if (name) api('/api/collections', { name }).then((c) => { S.cols.push(c); S.settings = c.id; draw(); }).catch((x) => say(x.message));
       return;
     }
+    if (d.settings) { S.settings = S.settings === d.settings ? null : d.settings; draw(); return root.querySelector('#col-settings')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+    if ('settingsDone' in d) { S.settings = null; return draw(); }
+    if (d.move) return patchCol(S.settings, { move: Number(d.move) });
+    if ('showhidden' in d) { S.showHidden = !S.showHidden; return draw(); }
     if ('delcol' in d) {
       if (!confirm(t('Delete this collection? Its recipes stay in your kitchen.'))) return;
-      const id = S.openCol;
+      const id = S.settings || S.openCol;
       return api('/api/collections/' + id, null, 'DELETE').then(() => {
         S.cols = S.cols.filter((c) => c.id !== id);
         S.recipes.forEach((r) => { r.collections = (r.collections || []).filter((x) => x !== id); });
-        S.openCol = null; draw();
+        S.openCol = S.settings = null; draw();
       }).catch((x) => say(x.message));
     }
     if ('sort' in d) {
@@ -290,11 +343,21 @@
     else if ('dropfound' in d) { S.found = null; draw(); }
   });
   root.addEventListener('change', async (e) => {
+    const form = e.target.closest('#col-settings');
+    if (form) {
+      const id = form.dataset.col, n = e.target.name;
+      if (n === 'layout') return patchCol(id, { layout: e.target.value });
+      if (n === 'hidden') return patchCol(id, { hidden: e.target.checked });
+      if (n === 'cover') { S.rot[id] = 0; return patchCol(id, { cover: e.target.value }); }
+      if (n === 'name' && e.target.value.trim()) return patchCol(id, { name: e.target.value.trim() });
+      return;
+    }
     if (e.target.dataset.pick) S.found[Number(e.target.dataset.pick)].pick = e.target.checked;
     if (e.target.dataset.drop) takeFiles(e.target.dataset.drop, e.target.files);
   });
   root.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (e.target.id === 'col-settings') return e.target.querySelector('[name=name]').blur();
     const f = new FormData(e.target);
     if (e.target.id === 'add') { if (f.get('name').trim()) merge([{ name: f.get('name').trim(), quantity: 1, unit: 'pcs' }]); draw(); return; }
     if (e.target.id === 'gen') {
