@@ -9,11 +9,14 @@ No npm dependencies anywhere: Node 24 built-ins, plain browser JS, Ghost and Tes
 |---|---|
 | **Library** | **A recipe** |
 | ![Library](docs/screenshots/home.png) | ![A recipe](docs/screenshots/recipe.png) |
+| | |
 | **My kitchen**: today's pick, create a recipe | **Collections** as 3D stacks |
 | ![My kitchen](docs/screenshots/kitchen.png) | ![Collections as 3D stacks](docs/screenshots/collections.png) |
 | **Ingredient explorer** | **Print** in every style |
+| | |
 | ![Ingredient explorer](docs/screenshots/explorer.png) | ![Print styles](docs/screenshots/print.png) |
 | **Colour themes**: Enamel, Pastel, Summer, Night | **Admin center** |
+| | |
 | ![Colour themes](docs/screenshots/themes.png) | ![Admin center](docs/screenshots/admin.png) |
 | **On a phone** | **How to read a recipe**: the animated explainer |
 | ![On a phone](docs/screenshots/phone.png) | ![How to read a recipe](docs/screenshots/how-to-read.png) |
