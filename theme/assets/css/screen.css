@@ -187,7 +187,9 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .seg button { border: 0; background: none; border-radius: 9px; padding: 6px 12px; font-weight: 700; color: var(--muted); }
 .seg button.on { background: var(--accent); color: var(--accent-ink); }
 .rt-prep { margin: 0; padding: 10px 16px 10px 34px; color: var(--muted); border-bottom: 2px solid var(--line); background: var(--cell); }
-.rt-scroll { overflow-x: auto; }
+.rt-tray { --tray-r: 22px; --tray-b: 3px; }
+/* inner corners = outer radius minus the border, so corner cells follow the tray's curve exactly */
+.rt-scroll { overflow-x: auto; border-radius: 0 0 calc(var(--tray-r) - var(--tray-b)) calc(var(--tray-r) - var(--tray-b)); }
 .rt { display: grid; min-width: 0; width: max(100%, calc(12rem + var(--cols) * 9.5rem));
   grid-template-columns: minmax(12rem, 1.25fr) repeat(var(--cols), minmax(9.5rem, 1fr)); }
 .rt > * { padding: 10px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--card); }
@@ -211,7 +213,7 @@ input:focus, textarea:focus { border-color: var(--accent); outline: none; }
 .rt-note { color: var(--muted); margin: 8px 0 0; }
 script[type="application/recipe+json"] { display: none; }
 @media (max-width: 720px) {
-  .rt-tray { border-width: 2px; border-radius: 16px; }
+  .rt-tray { border-width: 2px; border-radius: 16px; --tray-r: 16px; --tray-b: 2px; }
   .rt { grid-template-columns: minmax(10rem, 1.2fr) repeat(var(--cols), minmax(8rem, 1fr)); width: max(100%, calc(10rem + var(--cols) * 8rem)); }
   .rt-step.dish { font-size: 16px; }
 }
@@ -674,3 +676,11 @@ script[type="application/recipe+json"] { display: none; }
 }
 /* the player's table: square corners so the square highlight outlines line up with its edges */
 .ht-table .rt-tray { border-radius: 0; }
+
+.ht-table .rt-scroll { border-radius: 0; }
+@media print { .rt-scroll { border-radius: 0; } }
+/* no grid line where a cell meets the tray's rim (the rim is the line) */
+.rt > .edge-r { border-right: 0; }
+.rt > .edge-b { border-bottom: 0; }
+@media print { html[data-print="bw"] .rt > .edge-r, html:not([data-print]) .rt > .edge-r { border-right: .75pt solid #000; } html[data-print="bw"] .rt > .edge-b, html:not([data-print]) .rt > .edge-b { border-bottom: .75pt solid #000; } }
+.paper.bw .rt > .edge-r { border-right: 1px solid #000; } .paper.bw .rt > .edge-b { border-bottom: 1px solid #000; }
