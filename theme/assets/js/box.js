@@ -405,7 +405,13 @@
       <section class="card">
         <div class="sec-head">
           <h2>${t('My stock')}</h2>
-          ${S.tagMode !== 'off' && S.stock.length ? `<button type="button" class="btn" data-sort ${S.busy ? 'disabled' : ''}>${esc(t(S.busy === 'sort' ? 'Sorting…' : 'Sort my stock with AI'))}</button>` : ''}
+          ${S.tagMode !== 'off' && S.stock.length ? (() => {
+            const f = (S.me.usage.features || {}).sort || { used: 0, limit: 0 }, left = Math.max(0, f.limit - f.used);
+            return `<div class="sort-ctl">
+              <button type="button" class="btn" data-sort ${S.busy || !left ? 'disabled' : ''}>${esc(t(S.busy === 'sort' ? 'Sorting…' : 'Sort my stock with AI'))}</button>
+              <small>${left ? esc(t('{left} of {limit} sorts left this month', { left, limit: f.limit })) : `${esc(t('No sorts left this month'))}${S.me.usage.tier === 'free' ? ` · <a href="#/portal/account/plans">${esc(t('Get Pro for more'))}</a>` : ''}`}</small>
+            </div>`;
+          })() : ''}
         </div>
         ${zone('stock', { title: t('Snap your groceries or fridge'), hint: t('We spot every ingredient, you confirm.'), imgs: S.scanning, busy: S.busy === 'scan' ? t('Recognising…') : '', multiple: true, small: true })}
         <div class="row add-row">

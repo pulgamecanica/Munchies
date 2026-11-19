@@ -12,6 +12,8 @@ services:
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
       FREE_AI_PER_MONTH: ${FREE_AI_PER_MONTH:-5}
       PAID_AI_PER_MONTH: ${PAID_AI_PER_MONTH:-200}
+      SORT_FREE_PER_MONTH: ${SORT_FREE_PER_MONTH:-3}
+      SORT_PAID_PER_MONTH: ${SORT_PAID_PER_MONTH:-30}
       API_RATE_PER_MIN: ${API_RATE_PER_MIN:-120}
     volumes: ["api-data:/app/data"]
     expose: ["3000"]

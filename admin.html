@@ -158,7 +158,7 @@
 
         <section>
           <h2>Members</h2>
-          <p class="note">Monthly allowance: free ${mem.limits.free}, paid ${mem.limits.paid}. Bonus uses are spent after the allowance and carry over between months.</p>
+          <p class="note">Monthly allowance: free ${mem.limits.free}, paid ${mem.limits.paid}. AI stock sorts (also counted in the allowance): free ${mem.featureLimits.sort.free}, paid ${mem.featureLimits.sort.paid}. Bonus uses are spent after the allowance and carry over between months.</p>
           <div class="scroll"><table>
             <thead><tr><th>Member</th><th class="n">Used in ${esc(mo)}</th><th class="n">Bonus left</th><th class="n">Recipes</th><th class="n">Stock</th><th></th></tr></thead>
             <tbody>${mem.members.map((m) => `<tr data-uuid="${esc(m.uuid)}">

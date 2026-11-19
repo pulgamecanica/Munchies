@@ -19,6 +19,8 @@ const BASE = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const LIMITS = { free: Number(process.env.FREE_AI_PER_MONTH ?? 5), paid: Number(process.env.PAID_AI_PER_MONTH ?? 200) };
 const RATE = Number(process.env.API_RATE_PER_MIN) || 120;
+// Per-feature monthly caps on top of the general AI allowance, by plan.
+const FEATURE_LIMITS = { sort: { free: Number(process.env.SORT_FREE_PER_MONTH ?? 3), paid: Number(process.env.SORT_PAID_PER_MONTH ?? 30) } };
 const LANG_NAMES = { en: 'English', es: 'Spanish', fr: 'French', pt: 'Portuguese', it: 'Italian', de: 'German' };
 const langOf = (l) => (LANG_NAMES[l] ? l : null);
 const writeIn = (l) => (langOf(l) ? `\nWrite every human-readable text value (title, description, tags, step texts, ingredient names, notes) in ${LANG_NAMES[l]}.` : '');
@@ -45,6 +47,7 @@ if (!memberCols.includes('daily')) db.exec('ALTER TABLE members ADD COLUMN daily
 if (!memberCols.includes('seen')) db.exec("ALTER TABLE members ADD COLUMN seen TEXT NOT NULL DEFAULT '[]'"); // every ingredient name ever in stock
 if (!memberCols.includes('prefs')) db.exec("ALTER TABLE members ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'"); // e.g. { palette: 'night' }
 // analytics: one counter per day and kind of action
+db.exec('CREATE TABLE IF NOT EXISTS feature_usage (uuid TEXT NOT NULL, month TEXT NOT NULL, kind TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (uuid, month, kind))');
 db.exec('CREATE TABLE IF NOT EXISTS events (day TEXT NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, kind))');
 
 /* ---------- stock tags (global, admin-controlled) ---------- */
@@ -95,6 +98,9 @@ const q = {
   bonus: db.prepare('SELECT bonus FROM members WHERE uuid = ?'),
   takeBonus: db.prepare('UPDATE members SET bonus = bonus - 1 WHERE uuid = ? AND bonus > 0'),
   giveBonus: db.prepare('UPDATE members SET bonus = bonus + 1 WHERE uuid = ?'),
+  fUsed: db.prepare('SELECT used FROM feature_usage WHERE uuid = ? AND month = ? AND kind = ?'),
+  fTake: db.prepare('INSERT INTO feature_usage (uuid, month, kind, used) VALUES (?, ?, ?, 1) ON CONFLICT(uuid, month, kind) DO UPDATE SET used = used + 1 WHERE used < ?'),
+  fRefund: db.prepare('UPDATE feature_usage SET used = MAX(0, used - 1) WHERE uuid = ? AND month = ? AND kind = ?'),
   event: db.prepare('INSERT INTO events (day, kind, n) VALUES (?, ?, 1) ON CONFLICT(day, kind) DO UPDATE SET n = n + 1'),
   get: db.prepare('SELECT stock, recipes FROM members WHERE uuid = ?'),
   setStock: db.prepare('UPDATE members SET stock = ? WHERE uuid = ?'),
@@ -119,20 +125,25 @@ const q = {
 };
 const month = () => new Date().toISOString().slice(0, 7);
 const tierOf = (m) => (m.status === 'free' ? 'free' : 'paid'); // paid + comped
-const usageOf = (m) => ({ month: month(), used: q.used.get(m.uuid, month())?.used || 0, limit: LIMITS[tierOf(m)], bonus: q.bonus.get(m.uuid)?.bonus || 0, tier: tierOf(m) });
+const usageOf = (m) => ({ month: month(), used: q.used.get(m.uuid, month())?.used || 0, limit: LIMITS[tierOf(m)], bonus: q.bonus.get(m.uuid)?.bonus || 0, tier: tierOf(m),
+  features: Object.fromEntries(Object.entries(FEATURE_LIMITS).map(([k, l]) => [k, { used: q.fUsed.get(m.uuid, month(), k)?.used || 0, limit: l[tierOf(m)] }])) });
 const today = () => new Date().toISOString().slice(0, 10);
 const track = (kind) => { try { q.event.run(today(), kind); } catch {} };
 
 // Monthly allowance first, then admin-granted bonus uses. Both take/refund are single SQL statements (no overshoot).
 async function withQuota(m, kind, fn) {
   const limit = LIMITS[tierOf(m)];
+  const cap = FEATURE_LIMITS[kind] && FEATURE_LIMITS[kind][tierOf(m)];
+  if (cap !== undefined && (cap <= 0 || q.fTake.run(m.uuid, month(), kind, cap).changes === 0))
+    throw fail(402, tierOf(m) === 'free' ? "You've used this month's AI sorts on the free plan. Upgrade for more." : "You've used all of this month's AI sorts.");
+  const giveBack = () => { if (cap !== undefined) q.fRefund.run(m.uuid, month(), kind); };
   let from = 'month';
   if (limit <= 0 || q.take.run(m.uuid, month(), limit).changes === 0) {
-    if (q.takeBonus.run(m.uuid).changes === 0) throw fail(402, "You've used all your AI uses this month. Upgrade for more.");
+    if (q.takeBonus.run(m.uuid).changes === 0) { giveBack(); throw fail(402, "You've used all your AI uses this month. Upgrade for more."); }
     from = 'bonus';
   }
   try { const out = await fn(); track(kind); return out; }
-  catch (e) { from === 'bonus' ? q.giveBonus.run(m.uuid) : q.refund.run(m.uuid, month()); throw e; }
+  catch (e) { from === 'bonus' ? q.giveBonus.run(m.uuid) : q.refund.run(m.uuid, month()); giveBack(); throw e; }
 }
 
 /* ---------- http helpers ---------- */
@@ -298,7 +309,7 @@ async function api(req, res, p) {
     if (!ADMIN_TOKEN || req.headers.authorization !== 'Bearer ' + ADMIN_TOKEN) throw fail(401, 'Bad admin token.');
     if (p === '/api/admin/members' && req.method === 'GET') {
       const mo = month();
-      return send(res, 200, { month: mo, limits: LIMITS, members: q.admin.all(mo).map((r) => ({ ...r, usage: { [mo]: r.used } })) });
+      return send(res, 200, { month: mo, limits: LIMITS, featureLimits: FEATURE_LIMITS, members: q.admin.all(mo).map((r) => ({ ...r, usage: { [mo]: r.used } })) });
     }
     if (p === '/api/admin/tags' && req.method === 'GET') return send(res, 200, { mode: aiTagMode(), modes: AI_TAG_MODES, tags: tagList() });
     if (p === '/api/admin/settings' && req.method === 'PUT') {

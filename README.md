@@ -51,6 +51,7 @@ Docker Compose reads `.env` for both stacks. In Coolify, set the same names as e
 | `ANTHROPIC_API_KEY` | (empty) | turns on the AI features |
 | `CLAUDE_MODEL` | `claude-sonnet-5-5` | |
 | `FREE_AI_PER_MONTH` / `PAID_AI_PER_MONTH` | `5` / `200` | AI uses per member per month |
+| `SORT_FREE_PER_MONTH` / `SORT_PAID_PER_MONTH` | `3` / `30` | AI stock sorts per month (also count toward the allowance) |
 | `API_RATE_PER_MIN` | `120` | per-IP limit on `/api/*` |
 | `ADMIN_TOKEN` | `dev` | unlocks `/api/admin`. **Use a long random value in prod.** |
 | `OCR_LANGS` | `eng+fra` | Tesseract languages (installed: eng fra deu spa ita por nld; add more in `ocr/Dockerfile`) |

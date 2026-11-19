@@ -542,3 +542,7 @@ script[type="application/recipe+json"] { display: none; }
 @keyframes pop { 40% { transform: scale(1.08); } }
 @media (max-width: 600px) { .explorer { width: 100vw; height: 100dvh; border-radius: 0; border: 0; } .ex-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); } .ex-emoji { font-size: 32px; } }
 @media (prefers-reduced-motion: reduce) { .ex-tile.pop .ex-add, .newcol, .overview, .explorer[open] { animation: none; } }
+
+.sort-ctl { display: grid; justify-items: end; gap: 4px; }
+.sort-ctl small { color: var(--muted); font-size: 13px; }
+@media (max-width: 560px) { .sort-ctl { justify-items: start; } }
