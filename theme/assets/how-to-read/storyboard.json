@@ -92,7 +92,9 @@
       "start": 0,
       "end": 7,
       "pose": "idle",
-      "props": [],
+      "props": [
+        "hands-intro"
+      ],
       "highlight": {
         "all": true
       },
