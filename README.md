@@ -181,7 +181,7 @@ There are two compose files for production:
    | `ANTHROPIC_API_KEY` | turns on the AI features |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | needed so members can sign in (magic links) |
    | `RECEPEES_VERSION` | optional: pin a release, e.g. `1.0.0` (default `latest`) |
-6. **Deploy.** Open `https://your.domain/ghost` and create the owner account, then **Settings → Design → activate "recepees"** (once). Create a **page** with the slug `how-to-read` for the explainer. Connect Stripe under **Settings → Membership** for paid plans.
+6. **Deploy.** Open `https://your.domain/ghost` and create the owner account, then **Settings → Design → activate "recepees"** (once). Create a **page** with the slug `how-to-read` for the explainer. Connect Stripe under **Settings → Membership** for paid plans. Turn on comments under **Settings → Membership → Commenting** (all members or paid only); the theme shows them under every post.
 7. **Updates:** release a new version, then *Redeploy* in Coolify (with `latest`) or change `RECEPEES_VERSION`.
 
 **Alternative: build on the server.** In Coolify choose *Git Repository → Docker Compose* and set the compose path to `/docker-compose.build.yml`. Coolify clones the repo, so the `build:` paths resolve. Same domain and variables as above. Builds are slower, but no GHCR access is needed.

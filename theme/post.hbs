@@ -20,5 +20,13 @@
   <div class="gh-content">
     {{content}}
   </div>
+  {{!-- Ghost's native comments (members). The helper renders nothing until Settings → Membership → Commenting is turned on. --}}
+  {{#is "post"}}
+  {{#if @site.comments_enabled}}
+  <section class="post-comments" aria-label="Comments">
+    {{comments title="Comments" count=true mode="auto" saturation=60}}
+  </section>
+  {{/if}}
+  {{/is}}
 </article>
 {{/post}}
