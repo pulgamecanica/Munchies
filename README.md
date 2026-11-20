@@ -156,14 +156,34 @@ Images are sent as `data:image/...;base64,` URLs. AI endpoints take an optional 
 - **Releasing:** bump `VERSION` (and `RELEASE_NAME`) at the top of the `Makefile` and push to `main`. On every push, CI checks whether that version is released yet; if not, it releases it (pushing a `v*` tag works too, and an existing release is never redone). `make release` does the version sync, commit, tag and push in one go.
   - **GitHub** builds `linux/amd64` + `linux/arm64` images to GHCR (`ghcr.io/<owner>/<repo>-{api,ghost,ocr}`, tagged with the version and `latest`) and publishes a Release with notes and `recepees-theme.zip`.
   - **Forgejo** publishes a Release with the source code as a zip. It uses the job token; if your instance restricts it, add a `RELEASE_TOKEN` secret. The runner label is `docker` (edit `.forgejo/workflows/*.yml` if yours differs).
-- **Prebuilt images:** `docker-compose.ghcr.yml` pulls the released images (set `RECEPEES_VERSION`, and `IMAGE_PREFIX` if the repo moves). The packages are private on GHCR by default: make them public, or log Coolify in to ghcr.io.
+- **Images:** every release publishes `ghcr.io/pulgamecanica/munchies-{api,ghost,ocr}` (`latest` and the version number), which `docker-compose.prod.yml` pulls.
 
-## Deploy (GitHub → Coolify)
-1. Push this repo to GitHub.
-2. In Coolify: **New resource → Docker Compose**, pick the repo, compose file `docker-compose.prod.yml`.
-3. Give the **api** service your domain (container port 3000). Nothing else needs a public port.
-4. Environment variables: `PUBLIC_URL` (the same domain, with `https://`), `MYSQL_PASSWORD`, `ADMIN_TOKEN` (long and random), `ANTHROPIC_API_KEY`, `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`; optionally the limits above.
-5. Deploy, open `/ghost` to create the owner account, then **Settings → Design → activate "recepees"** once. Connect Stripe under **Settings → Membership** for paid plans.
-6. Create a page with the slug `how-to-read` for the explainer (title and intro are yours; the player is built in).
+## Deploy (Coolify)
+There are two compose files for production:
 
-`Dockerfile.ghost` bakes the theme and `routes.yaml` into the Ghost image and re-copies them on every boot, so each redeploy ships theme changes. Data lives in the `api-data` (SQLite), `ghost-content` and `db` volumes: back those up.
+| File | Needs the source code? | Use it when |
+|---|---|---|
+| **`docker-compose.prod.yml`** | **No.** Pulls the released images from GHCR. | Deploying anywhere, including pasting it into Coolify. **Recommended.** |
+| `docker-compose.build.yml` | Yes: its `build:` paths point into this repo. | Coolify builds from your Git repo, or `make prod` locally. |
+
+**Recommended: prebuilt images**
+1. **Release first.** Push `main` with a new `VERSION` in the `Makefile` (see *CI/CD and releases*). Wait for the GitHub *Release* run to finish: the images then exist on GHCR.
+2. **Make the images pullable.** GitHub → your profile → *Packages* → `munchies-api`, `munchies-ghost`, `munchies-ocr` → *Package settings* → *Change visibility* → **Public** (once per package). Or keep them private and add GHCR credentials in Coolify (*Keys & Tokens → Docker Registry*: `ghcr.io`, your GitHub username, a token with `read:packages`).
+3. **Coolify → New resource → Docker Compose Empty**, paste `docker-compose.prod.yml`. (Or *Public/Private Git Repository → Docker Compose* with the compose path `/docker-compose.prod.yml`: Coolify reads the file from the repo but still pulls the images.)
+4. **Domain:** on the **api** service set your domain, e.g. `https://recipes.example.com` (container port 3000). No other service needs a domain.
+5. **Environment variables:**
+
+   | Variable | Value |
+   |---|---|
+   | `PUBLIC_URL` | the same domain, with `https://` |
+   | `MYSQL_PASSWORD` | a long random password (also used for the MySQL user) |
+   | `ADMIN_TOKEN` | a long random string (unlocks `/api/admin`) |
+   | `ANTHROPIC_API_KEY` | turns on the AI features |
+   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | needed so members can sign in (magic links) |
+   | `RECEPEES_VERSION` | optional: pin a release, e.g. `1.0.0` (default `latest`) |
+6. **Deploy.** Open `https://your.domain/ghost` and create the owner account, then **Settings → Design → activate "recepees"** (once). Create a **page** with the slug `how-to-read` for the explainer. Connect Stripe under **Settings → Membership** for paid plans.
+7. **Updates:** release a new version, then *Redeploy* in Coolify (with `latest`) or change `RECEPEES_VERSION`.
+
+**Alternative: build on the server.** In Coolify choose *Git Repository → Docker Compose* and set the compose path to `/docker-compose.build.yml`. Coolify clones the repo, so the `build:` paths resolve. Same domain and variables as above. Builds are slower, but no GHCR access is needed.
+
+**Data** lives in the `api-data` (SQLite: kitchens, usage, tags), `ghost-content` (images, theme, settings) and `db` (MySQL: members, posts) volumes. Back those up. Each boot re-copies the theme and `routes.yaml` from the Ghost image, so updating the image updates the theme.

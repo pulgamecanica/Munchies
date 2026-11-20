@@ -3,7 +3,7 @@
 PORT ?= 3000
 MAIL_UI_PORT ?= 8026
 URL := http://localhost:$(strip $(PORT))
-PROD := docker compose -f docker-compose.prod.yml
+PROD := docker compose -f docker-compose.build.yml # local production stack, built from this checkout
 
 # Release: bump VERSION (and RELEASE_NAME), commit and push to main. CI releases any version that isn't released yet:
 # GitHub builds GHCR images + a Release, Forgejo makes a source-zip Release. `make release` does the bump-commit-tag-push for you.
@@ -48,10 +48,10 @@ ocr-test: ## OCR an image through the running stack: make ocr-test img=page.jpg
 	@test -n "$(img)" || (echo "usage: make ocr-test img=path/to/photo.jpg" && exit 1)
 	@docker compose exec -T ocr node -e "process.stdin.pipe(require('http').request('http://127.0.0.1:8884/',{method:'POST'},(r)=>r.pipe(process.stdout)))" < "$(img)"; echo
 
-build: ## Build the production images (ghost with theme, gateway, ocr)
+build: ## Build the production images from source (ghost with theme, gateway, ocr)
 	$(PROD) build
 
-prod: ## Run the production stack locally (needs PUBLIC_URL, MYSQL_PASSWORD, ADMIN_TOKEN in .env)
+prod: ## Run the production stack locally, built from source (needs PUBLIC_URL, MYSQL_PASSWORD, ADMIN_TOKEN in .env)
 	$(PROD) up -d --build
 
 prod-down: ## Stop the local production stack

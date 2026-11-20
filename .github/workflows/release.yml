@@ -96,7 +96,7 @@ jobs:
             echo '```sh'
             for s in api ghost ocr; do echo "docker pull $IMAGE-$s:$VERSION"; done
             echo '```'
-            echo "Deploy with \`docker-compose.ghcr.yml\` (\`RECEPEES_VERSION=$VERSION\`), or build from source with \`docker-compose.prod.yml\`."
+            echo "Deploy with \`docker-compose.prod.yml\` (pulls these images; pin with \`RECEPEES_VERSION=$VERSION\`), or build from source inside a checkout with \`docker-compose.build.yml\`."
             echo
             echo "The theme alone is attached as \`recepees-theme.zip\` (Ghost admin → Settings → Design → Upload theme)."
             echo

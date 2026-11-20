@@ -1,12 +1,14 @@
-# Production from prebuilt images (made by the GitHub Release workflow) instead of building on the server.
-# Same variables as docker-compose.prod.yml, plus IMAGE_PREFIX and RECEPEES_VERSION.
-
+# Production stack BUILT FROM SOURCE: the `build:` paths are relative to this file, so it only works inside a checkout of
+# this repository (e.g. `make prod` locally, or Coolify's "Git repository → Docker Compose" build pack, which clones the repo).
+# To deploy without the source code, use docker-compose.prod.yml (prebuilt images) instead.
+# Same variables as docker-compose.prod.yml.
 services:
   api:
-    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-api:${RECEPEES_VERSION:-latest}
+    build: .
     restart: unless-stopped
     environment:
       GHOST_URL: http://ghost:2368
+      PUBLIC_URL: ${PUBLIC_URL}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
@@ -23,7 +25,7 @@ services:
     depends_on: [ghost, ocr]
 
   ocr:
-    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-ocr:${RECEPEES_VERSION:-latest}
+    build: ./ocr
     restart: unless-stopped
     environment:
       OCR_LANGS: ${OCR_LANGS:-eng+fra}
@@ -31,7 +33,7 @@ services:
     deploy: { resources: { limits: { memory: 1g } } }
 
   ghost:
-    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-ghost:${RECEPEES_VERSION:-latest}
+    build: { context: ., dockerfile: Dockerfile.ghost }
     restart: unless-stopped
     environment:
       url: ${PUBLIC_URL:?set PUBLIC_URL}

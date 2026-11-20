@@ -1,12 +1,14 @@
-# Production / Coolify: point Coolify at this file. Set the domain on the `api` service (port 3000).
-# Required env: PUBLIC_URL (https://your.domain), MYSQL_PASSWORD, ADMIN_TOKEN, ANTHROPIC_API_KEY, SMTP_* for member emails.
+# Production: self-contained, pulls the released images from GHCR. Works anywhere, including pasted into Coolify
+# ("Docker Compose Empty"): no source code needed. Give the `api` service your domain (port 3000).
+# Required env: PUBLIC_URL (https://your.domain), MYSQL_PASSWORD, ADMIN_TOKEN; recommended: ANTHROPIC_API_KEY, SMTP_*, MAIL_FROM.
+# Optional: RECEPEES_VERSION (default latest, e.g. 1.0.0), IMAGE_PREFIX (default ghcr.io/pulgamecanica/munchies).
+
 services:
   api:
-    build: .
+    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-api:${RECEPEES_VERSION:-latest}
     restart: unless-stopped
     environment:
       GHOST_URL: http://ghost:2368
-      PUBLIC_URL: ${PUBLIC_URL}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-5-5}
@@ -23,7 +25,7 @@ services:
     depends_on: [ghost, ocr]
 
   ocr:
-    build: ./ocr
+    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-ocr:${RECEPEES_VERSION:-latest}
     restart: unless-stopped
     environment:
       OCR_LANGS: ${OCR_LANGS:-eng+fra}
@@ -31,7 +33,7 @@ services:
     deploy: { resources: { limits: { memory: 1g } } }
 
   ghost:
-    build: { context: ., dockerfile: Dockerfile.ghost }
+    image: ${IMAGE_PREFIX:-ghcr.io/pulgamecanica/munchies}-ghost:${RECEPEES_VERSION:-latest}
     restart: unless-stopped
     environment:
       url: ${PUBLIC_URL:?set PUBLIC_URL}
