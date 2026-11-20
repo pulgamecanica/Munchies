@@ -240,7 +240,11 @@ script[type="application/recipe+json"] { display: none; }
 .stock li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
 .stock small { color: var(--muted); }
 .qty { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-.qty button { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); }
+.qty button[data-bump] { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); }
+/* the quantity itself: a pill that grows with its text (number, unit, pencil) */
+.qty .qty-n { flex: none; width: auto; height: 32px; min-width: 52px; justify-content: center; padding: 0 10px; margin: 0; border: 1px solid transparent; border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.qty .qty-n:hover, .qty .qty-n:focus-visible { border-color: var(--line); }
+.qty .qty-in { height: 32px; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px; z-index: 99; max-width: calc(100vw - 32px); }
 
 /* photo drop zone */
