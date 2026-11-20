@@ -7,8 +7,8 @@ PROD := docker compose -f docker-compose.build.yml # local production stack, bui
 
 # Release: bump VERSION (and RELEASE_NAME), commit and push to main. CI releases any version that isn't released yet:
 # GitHub builds GHCR images + a Release, Forgejo makes a source-zip Release. `make release` does the bump-commit-tag-push for you.
-VERSION := 1.0.1
-RELEASE_NAME := Sunday Pancakes
+VERSION := 1.1.0
+RELEASE_NAME := Pocket Kitchen
 
 .DEFAULT_GOAL := help
 .PHONY: help env dev up down restart logs ps check zip ocr-test build prod prod-down prod-logs reset version release-name print-version release ci
