@@ -23,8 +23,9 @@
   {{!-- Ghost's native comments (members). The helper renders nothing until Settings → Membership → Commenting is turned on. --}}
   {{#is "post"}}
   {{#if @site.comments_enabled}}
-  <section class="post-comments" aria-label="Comments">
-    {{comments title="Comments" count=true mode="auto" saturation=60}}
+  {{!-- Ghost's comments script sits in an inert template; i18n.js loads it with the visitor's palette colours and language. --}}
+  <section class="post-comments" aria-label="Comments" data-comments>
+    <template>{{comments title="Comments" count=true mode="auto" saturation=60}}</template>
   </section>
   {{/if}}
   {{/is}}

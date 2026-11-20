@@ -33,6 +33,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Has usado todos tus usos de IA de este mes. Hazte Pro para más.', 'Too many requests, slow down a little.': 'Demasiadas solicitudes, ve un poco más despacio.',
       'Could not read any text in that photo.': 'No se pudo leer texto en esa foto.', 'That link is not reachable.': 'No se puede acceder a ese enlace.', 'Only http(s) links.': 'Solo enlaces http(s).',
       'Pick at least one ingredient.': 'Elige al menos un ingrediente.', 'The AI reply was not a valid recipe.': 'La respuesta de la IA no era una receta válida.', 'Request too large': 'La solicitud es demasiado grande',
+      'Comments': "Comentarios",
       "Open recipe": "Abrir receta",
       "{done} of {total} steps done": "{done} de {total} pasos hechos",
       "Cooking now": "Cocinando ahora",
@@ -202,6 +203,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Vous avez utilisé toutes vos utilisations de l’IA ce mois-ci. Passez Pro pour en avoir plus.', 'Too many requests, slow down a little.': 'Trop de requêtes, ralentissez un peu.',
       'Could not read any text in that photo.': 'Aucun texte lisible sur cette photo.', 'That link is not reachable.': 'Ce lien est inaccessible.', 'Only http(s) links.': 'Liens http(s) uniquement.',
       'Pick at least one ingredient.': 'Choisissez au moins un ingrédient.', 'The AI reply was not a valid recipe.': 'La réponse de l’IA n’était pas une recette valide.', 'Request too large': 'Requête trop volumineuse',
+      'Comments': "Commentaires",
       "Open recipe": "Ouvrir la recette",
       "{done} of {total} steps done": "{done} étapes sur {total} faites",
       "Cooking now": "En cours",
@@ -371,6 +373,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Já usou todos os usos de IA deste mês. Seja Pro para mais.', 'Too many requests, slow down a little.': 'Pedidos a mais, abrande um pouco.',
       'Could not read any text in that photo.': 'Não foi possível ler texto nessa foto.', 'That link is not reachable.': 'Não é possível aceder a esse link.', 'Only http(s) links.': 'Apenas links http(s).',
       'Pick at least one ingredient.': 'Escolha pelo menos um ingrediente.', 'The AI reply was not a valid recipe.': 'A resposta da IA não era uma receita válida.', 'Request too large': 'Pedido demasiado grande',
+      'Comments': "Comentários",
       "Open recipe": "Abrir receita",
       "{done} of {total} steps done": "{done} de {total} passos feitos",
       "Cooking now": "A cozinhar agora",
@@ -540,6 +543,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Hai usato tutti gli utilizzi IA di questo mese. Passa a Pro per averne di più.', 'Too many requests, slow down a little.': 'Troppe richieste, rallenta un po’.',
       'Could not read any text in that photo.': 'Nessun testo leggibile nella foto.', 'That link is not reachable.': 'Il link non è raggiungibile.', 'Only http(s) links.': 'Solo link http(s).',
       'Pick at least one ingredient.': 'Scegli almeno un ingrediente.', 'The AI reply was not a valid recipe.': 'La risposta dell’IA non era una ricetta valida.', 'Request too large': 'Richiesta troppo grande',
+      'Comments': "Commenti",
       "Open recipe": "Apri ricetta",
       "{done} of {total} steps done": "{done} di {total} passaggi fatti",
       "Cooking now": "In preparazione",
@@ -709,6 +713,7 @@
       "You've used all your AI uses this month. Upgrade for more.": 'Du hast alle KI-Nutzungen dieses Monats verbraucht. Mit Pro gibt’s mehr.', 'Too many requests, slow down a little.': 'Zu viele Anfragen, bitte etwas langsamer.',
       'Could not read any text in that photo.': 'Auf dem Foto war kein Text lesbar.', 'That link is not reachable.': 'Dieser Link ist nicht erreichbar.', 'Only http(s) links.': 'Nur http(s)-Links.',
       'Pick at least one ingredient.': 'Wähle mindestens eine Zutat.', 'The AI reply was not a valid recipe.': 'Die KI-Antwort war kein gültiges Rezept.', 'Request too large': 'Anfrage zu groß',
+      'Comments': "Kommentare",
       "Open recipe": "Rezept öffnen",
       "{done} of {total} steps done": "{done} von {total} Schritten erledigt",
       "Cooking now": "Wird gerade gekocht",
@@ -878,12 +883,33 @@
   // Colour theme: header swatches set it, the browser remembers it, members also get it saved to their account.
   const root = document.documentElement, member = document.body.hasAttribute('data-member');
   const markPal = () => document.querySelectorAll('[data-pal]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pal === root.dataset.palette)));
+  /* Ghost comments live in an iframe our CSS can't reach, so they get the palette through the attributes Ghost reads:
+     accent colour, light/dark, and the visitor's language. Re-mounted when the palette changes. */
+  const mountComments = () => {
+    document.querySelectorAll('[data-comments]').forEach((box) => {
+      const tpl = box.querySelector('template'), src = tpl && tpl.content.querySelector('script');
+      if (!src) return;
+      const p = root.dataset.palette || 'enamel';
+      const dark = p === 'night' || (p === 'enamel' && matchMedia('(prefers-color-scheme: dark)').matches);
+      const accent = getComputedStyle(root).getPropertyValue('--accent').trim();
+      const s = document.createElement('script');
+      for (const a of src.attributes) s.setAttribute(a.name, a.value);
+      s.setAttribute('data-color-scheme', dark ? 'dark' : 'light');
+      if (accent) s.setAttribute('data-accent-color', accent);
+      s.setAttribute('data-locale', lang);
+      s.setAttribute('data-title', t('Comments'));
+      [...box.childNodes].forEach((n) => { if (n !== tpl) n.remove(); }); // drop the previous comments frame
+      box.append(s);
+    });
+  };
   const setPal = (p, save) => {
-    root.dataset.palette = p; markPal();
+    root.dataset.palette = p; markPal(); mountComments();
     try { localStorage.setItem('palette', p); } catch {}
     if (save && member) fetch('/api/prefs', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ palette: p }) }).catch(() => {});
   };
   markPal();
+  mountComments();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if ((root.dataset.palette || 'enamel') === 'enamel') mountComments(); });
   document.querySelectorAll('[data-pal]').forEach((b) => b.addEventListener('click', () => { setPal(b.dataset.pal, true); b.closest('details').open = false; }));
   document.querySelectorAll('.pal summary').forEach((sm) => sm.setAttribute('aria-label', t('Colour theme')));
   let local = null; try { local = localStorage.getItem('palette'); } catch {}

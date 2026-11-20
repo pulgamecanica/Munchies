@@ -979,3 +979,6 @@ body[data-member] .foot a[href$="/#/portal/signup"] { display: none; }
 /* Ghost comments: same column as the post text */
 .post-comments { max-width: 68ch; margin: 48px 0 0; padding-top: 28px; border-top: 2px solid var(--line); }
 @media print { .post-comments { display: none; } }
+/* Browsers paint an opaque white backdrop behind an iframe whose colour scheme differs from the page's (Night is
+   `color-scheme: dark`, the comments document is not). Matching it keeps the frame transparent on every palette. */
+.post-comments { color-scheme: light; }
