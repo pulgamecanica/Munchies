@@ -9,8 +9,7 @@ Create a **page** (not a post) with the slug **`how-to-read`**. Ghost uses the `
 **One minute, one recipe, two arms.** We never show a face or a kitchen, only the cook's arms, the ingredients and the tools, drawn as single-weight lines. Next to the drawing is the real recipe table, and it lights up in step with the cooking. The viewer should finish thinking "oh, it's just a map: left to right, everything comes together".
 
 ## Art direction
-- **Line only.** Round caps and joins, no fills, no shading, no text in the drawing. Hands use a **fine line (≈1.15 units on the 400×320 canvas)** like the references; the worktop is lighter (theme grey at half strength). The remaining placeholder props still use 3 units until they're redrawn.
-- **Hands (chapter 1 is the model for the rest):** long, elegant fingers, nails as small closed rounded shapes, forearms as two long lines running out of frame. Perspective from the side, at table height; motion almost still.
+- **Line only.** One stroke weight (3 units on a 400×320 canvas), round caps and joins, no fills, no shading, no text in the drawing.
 - **Colour comes from the theme.** Use `stroke="currentColor"`: dark lines on light themes, light lines on Night. Never hard-code a colour.
 - **Draw-in.** Every shape draws itself in when its scene starts; the length is measured automatically, so any `<path>`, `<ellipse>`, `<circle>`, `<rect>`, `<line>` or `<polyline>` works. Draw each shape in the order you'd sketch it, because the path direction is the drawing direction.
 - **Arms.** Two arms enter from the bottom corners, with the shoulders off-canvas (left at −20,340, right at 420,340). Keep them simple and friendly: a sleeve line, a wrist, mitten-like hands. Poses rotate and translate each arm around its shoulder.
@@ -21,9 +20,7 @@ Create a **page** (not a post) with the slug **`how-to-read`**. Ghost uses the `
 ### Layer ids (keep these when you replace the art)
 | id | what | used in scenes |
 |---|---|---|
-| `hands-intro` (`.hand-l` palm up from the left, `.hand-r` palm down from the right) | **final art**, fine-line hands in the style of the references, almost still (a slow breath) | intro |
-| `arm-l`, `arm-r` | the two arms (groups, origin at the shoulder), placeholder | all except intro |
-| `.counter.wood` | the worktop: planks in perspective, light grey grain, runs past both edges | all (always visible) |
+| `arm-l`, `arm-r` | the two arms (groups, origin at the shoulder) | all |
 | `flour`, `sugar`, `milk`, `egg`, `butter` | ingredients | ingredients, dry, wet |
 | `bowl-a` | first bowl (dry) | dry, wet, fold |
 | `bowl-b` (with an inner `.tilt` group) | second bowl (wet), tilts to pour | wet, fold |
@@ -36,7 +33,7 @@ Want more props or poses? Add an element with a new id, list it in a scene's `pr
 ## Storyboard (62 s, placeholder recipe: Sunday pancakes)
 | # | Time | Scene id | Arms (pose) | Drawing | Table | Caption / voice-over (EN) |
 |---|---|---|---|---|---|---|
-| 1 | 0:00–0:07 | `intro` | `idle`: the placeholder arms hide; two fine-line hands (one offering from below, one reaching from above) draw themselves in and barely breathe | the wooden worktop | whole table | This is a recipe, drawn as a map. You read it from left to right, like a sentence. |
+| 1 | 0:00–0:07 | `intro` | `idle`, resting | counter line | whole table | This is a recipe, drawn as a map. You read it from left to right, like a sentence. |
 | 2 | 0:07–0:16 | `ingredients` | `gather`, reaching in turn | flour, sugar, milk, egg and butter pop in | ingredient rows light up one by one | Down the left: every ingredient, in the order you will use it. It is your shopping list too. |
 | 3 | 0:16–0:26 | `dry` | `whisk` over bowl A | bowl A, whisk, flour, sugar | rows 1–4 + the first "Whisk" | A step sits right next to what it uses. This Whisk covers the flour, sugar, baking powder and salt: whisk exactly those together. |
 | 4 | 0:26–0:35 | `wet` | `crack` an egg over bowl B | both bowls, egg, milk | rows 5–7 + the second "Whisk" | Steps in the same column can happen in any order. In a second bowl, whisk the milk, eggs and melted butter. |
