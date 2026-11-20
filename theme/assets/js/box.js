@@ -310,6 +310,27 @@
       if ('exClose' in b.dataset) return dlg.close();
       const name = b.closest('[data-ex]')?.dataset.ex; if (!name) return;
       const it = inStock(name), c = catFor(name);
+      if (b.dataset.exQty !== undefined && it) {
+        // Type an amount right on the tile: Enter/blur saves, Escape cancels, 0 sends it to the trash.
+        const input = Object.assign(document.createElement('input'), { type: 'number', min: 0, step: 'any', value: it.qty, className: 'ex-qty-in' });
+        input.setAttribute('aria-label', `${t('Edit amount')}: ${name}`);
+        b.replaceWith(input); input.focus(); input.select();
+        let gone = false;
+        const commit = () => {
+          if (gone) return; gone = true;
+          const v = Number(input.value);
+          if (Number.isFinite(v) && v >= 0 && v !== it.qty) {
+            it.qty = v;
+            if (v === 0) S.stock = S.stock.filter((x) => x.qty > 0);
+            saveStock(); draw();
+          }
+          drawExplorer();
+        };
+        input.addEventListener('keydown', (k) => { if (k.key === 'Enter') { k.preventDefault(); commit(); } if (k.key === 'Escape') { k.preventDefault(); k.stopPropagation(); gone = true; drawExplorer(); } });
+        input.addEventListener('blur', commit);
+        input.addEventListener('click', (k) => k.stopPropagation());
+        return;
+      }
       if (b.dataset.exMinus !== undefined) { if (it) { it.qty = Math.max(0, it.qty - 1); S.stock = S.stock.filter((x) => x.qty > 0); } }
       else if (it) it.qty += 1;
       else S.stock.push({ id: uid(), name, qty: 1, unit: (c && c.unit) || 'pcs', note: '', tag: (c && c.tag) || '' });
@@ -330,7 +351,7 @@
       return `<li class="ex-tile${it ? ' has' : ''}" data-ex="${esc(name)}">
         <button type="button" class="ex-add" aria-label="${esc(t('One more {name}', { name }))}">
           <span class="ex-emoji" aria-hidden="true">${emoji ? esc(emoji) : tg ? tagIcon(tg.icon) : '🥄'}</span><span class="ex-name">${esc(name)}</span></button>
-        ${it ? `<span class="ex-qty">${esc(it.qty)}<small> ${esc(it.unit)}</small></span><button type="button" class="ex-minus" data-ex-minus aria-label="${esc(t('One less {name}', { name }))}">−</button>` : ''}
+        ${it ? `<button type="button" class="ex-qty" data-ex-qty title="${esc(t('Edit amount'))}" aria-label="${esc(t('Edit amount'))}: ${esc(name)}">${esc(it.qty)}<small> ${esc(it.unit)}</small><svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button><button type="button" class="ex-minus" data-ex-minus aria-label="${esc(t('One less {name}', { name }))}">−</button>` : ''}
       </li>`;
     };
     const match = (names) => !q || names.some((n) => n.includes(q));

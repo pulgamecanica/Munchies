@@ -548,7 +548,11 @@ script[type="application/recipe+json"] { display: none; }
 .ex-emoji .ticon { width: 40px; height: 40px; -webkit-mask-size: 28px; mask-size: 28px; }
 .ex-name { font-weight: 700; font-size: 13.5px; text-align: center; line-height: 1.15; overflow-wrap: anywhere; }
 .ex-tile.has .ex-add { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
-.ex-qty { position: absolute; top: 6px; right: 6px; pointer-events: none; min-width: 26px; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 13px; text-align: center; }
+.ex-qty { position: absolute; top: 6px; right: 6px; z-index: 1; display: inline-flex; align-items: center; gap: 3px; min-width: 26px; padding: 2px 8px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 800 13px var(--sans); white-space: nowrap; cursor: text; }
+.ex-qty .pen { width: 11px; height: 11px; }
+.ex-qty:hover .pen, .ex-qty:focus-visible .pen { opacity: 1; }
+.ex-qty:hover { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
+.ex-qty-in { position: absolute; top: 4px; right: 4px; z-index: 2; width: 72px !important; padding: 3px 8px !important; border-radius: 999px !important; border: 2px solid var(--accent) !important; background: var(--card) !important; font-weight: 800; font-variant-numeric: tabular-nums; text-align: center; }
 .ex-qty small { font-weight: 600; font-size: 10.5px; }
 .ex-minus { position: absolute; top: 6px; left: 6px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); color: var(--ink); font-weight: 800; line-height: 1; }
 .ex-minus:hover { border-color: var(--warn); color: var(--warn); }
