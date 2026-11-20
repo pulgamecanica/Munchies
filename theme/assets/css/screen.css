@@ -976,8 +976,8 @@ body[data-member] .foot a[href$="/#/portal/signup"] { display: none; }
   .add-row > #add { flex: 1 1 100%; }
 }
 
-/* Ghost comments: centred, up to 500px wide */
-.post-comments { width: 100%; max-width: 500px; margin: 48px auto 0; padding-top: 28px; border-top: 2px solid var(--line); } /* full width on small screens, centred and capped at 500px */
+/* Ghost comments: same column as the post content */
+.post-comments { width: 100%; max-width: none; margin: 48px 0 0; padding-top: 28px; border-top: 2px solid var(--line); } /* same width and alignment as the post content above it */
 @media print { .post-comments { display: none; } }
 /* Browsers paint an opaque white backdrop behind an iframe whose colour scheme differs from the page's (Night is
    `color-scheme: dark`, the comments document is not). Matching it keeps the frame transparent on every palette. */
