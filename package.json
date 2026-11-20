@@ -1,6 +1,6 @@
 {
   "name": "recepees",
-  "version": "2.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Ghost theme + API gateway + OCR service for recipe tables, a member recipe box and AI usage limits",
   "scripts": {

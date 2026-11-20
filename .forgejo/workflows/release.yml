@@ -1,10 +1,16 @@
-# On a v* tag (made by `make release`): publish a Forgejo Release with the source code as a zip.
-# Uses the job's automatic token; if your instance restricts it, add a RELEASE_TOKEN secret (scope: write:repository).
+# Releases: whenever main (or a v* tag) has a VERSION (Makefile) that hasn't been released yet,
+# publish a Forgejo Release with the source code as a zip. Bump VERSION + push = release.
+# Uses the job token; if your instance restricts it, add a RELEASE_TOKEN secret (scope: write:repository).
 name: Release
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -15,19 +21,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Source zip and notes
-        run: |
-          TAG="$GITHUB_REF_NAME"
-          git archive --format=zip --prefix="munchies-$TAG/" -o "munchies-$TAG-source.zip" "$TAG"
-          PREV=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
-          { echo "## Changes"; if [ -n "$PREV" ]; then git log --no-merges --pretty='- %s' "$PREV..$TAG"; else git log --no-merges --pretty='- %s' "$TAG"; fi; } > notes.md
-          echo "TITLE=$TAG: $(make -s release-name)" >> "$GITHUB_ENV"
-      - name: Publish
+      - name: Release if this version is new
         env:
           TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
+          case "$GITHUB_REF" in refs/tags/v*) VERSION="${GITHUB_REF_NAME#v}" ;; *) VERSION="$(make -s print-version)" ;; esac
+          TAG="v$VERSION"
           API="$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY"
-          BODY=$(node -e 'const fs=require("fs");process.stdout.write(JSON.stringify({tag_name:process.env.GITHUB_REF_NAME,name:process.env.TITLE,body:fs.readFileSync("notes.md","utf8")}))')
+          if curl -fsS -o /dev/null -H "Authorization: token $TOKEN" "$API/releases/tags/$TAG"; then echo "$TAG already released, skipping"; exit 0; fi
+          git archive --format=zip --prefix="munchies-$TAG/" -o "munchies-$TAG-source.zip" HEAD
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          { echo "## Changes"; if [ -n "$PREV" ]; then git log --no-merges --pretty='- %s' "$PREV..HEAD"; else git log --no-merges --pretty='- %s'; fi; } > notes.md
+          TITLE="$TAG: $(make -s release-name)"
+          BODY=$(TAG="$TAG" TITLE="$TITLE" node -e 'const fs=require("fs");process.stdout.write(JSON.stringify({tag_name:process.env.TAG,target_commitish:process.env.GITHUB_SHA,name:process.env.TITLE,body:fs.readFileSync("notes.md","utf8")}))')
           ID=$(curl -fsS -X POST "$API/releases" -H "Authorization: token $TOKEN" -H 'Content-Type: application/json' -d "$BODY" | node -pe 'JSON.parse(require("fs").readFileSync(0)).id')
-          curl -fsS -X POST "$API/releases/$ID/assets?name=munchies-$GITHUB_REF_NAME-source.zip" -H "Authorization: token $TOKEN" -F "attachment=@munchies-$GITHUB_REF_NAME-source.zip" > /dev/null
-          echo "Released $GITHUB_REF_NAME (id $ID)"
+          curl -fsS -X POST "$API/releases/$ID/assets?name=munchies-$TAG-source.zip" -H "Authorization: token $TOKEN" -F "attachment=@munchies-$TAG-source.zip" > /dev/null
+          echo "Released $TAG (id $ID)"
