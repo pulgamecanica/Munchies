@@ -982,3 +982,5 @@ body[data-member] .foot a[href$="/#/portal/signup"] { display: none; }
 /* Browsers paint an opaque white backdrop behind an iframe whose colour scheme differs from the page's (Night is
    `color-scheme: dark`, the comments document is not). Matching it keeps the frame transparent on every palette. */
 .post-comments { color-scheme: light; }
+/* Ghost Portal iframes (sign-in, toasts) paint an opaque white backdrop when the page is color-scheme: dark */
+#ghost-portal-root { color-scheme: light; }

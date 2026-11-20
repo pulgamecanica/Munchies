@@ -306,7 +306,7 @@
     dlg.addEventListener('click', (e) => {
       if (e.target === dlg) return dlg.close(); // backdrop
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.exCat) { EX.cat = b.dataset.exCat; return drawExplorer(); }
+      if (b.dataset.exCat) { EX.cat = b.dataset.exCat; drawExplorer(); dlg.querySelector('.ex-body').scrollTop = 0; return; }
       if ('exClose' in b.dataset) return dlg.close();
       const name = b.closest('[data-ex]')?.dataset.ex; if (!name) return;
       const it = inStock(name), c = catFor(name);
@@ -364,6 +364,7 @@
       ${show('yours') && yours.length ? `<section><h3>${esc(t('From your kitchen'))}</h3><ul class="ex-grid">${yours.map((x) => tile(x.name, x.emoji, x.tag)).join('')}</ul></section>` : ''}
       ${shelves.filter((x) => show(x.tg.id)).map(({ tg, items }) => `<section><h3>${tagIcon(tg.icon)}${esc(tagName(tg))}</h3><ul class="ex-grid">${items.map((c) => tile(c.name, c.emoji, c.tag)).join('')}</ul></section>`).join('')
         || `<p class="empty">${esc(t('Nothing matches. Type the name and press Add in your stock instead.'))}</p>`}`;
+    const top = dlg.querySelector('.ex-body')?.scrollTop || 0; // redraws keep your place in the list
     if (keepSearch && dlg.querySelector('.ex-body')) { dlg.querySelector('.ex-body').innerHTML = body; dlg.querySelector('.ex-count').textContent = t('{n} items in your stock', { n: added }); return; }
     dlg.innerHTML = `
       <div class="ex-head">
@@ -378,6 +379,7 @@
         ${S.tags.filter((tg) => CAT.some((c) => c.tag === tg.id)).map((tg) => `<button type="button" data-ex-cat="${esc(tg.id)}" aria-pressed="${EX.cat === tg.id}">${tagIcon(tg.icon)}${esc(tagName(tg))}</button>`).join('')}
       </nav>
       <div class="ex-body">${body}</div>`;
+    dlg.querySelector('.ex-body').scrollTop = top;
   }
 
   function draw() {
