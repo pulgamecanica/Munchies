@@ -49,6 +49,7 @@
       if (s.state === 'ring') ringing = true;
     }
     paintAll();
+    pip();
     if (ringing) alarm(); else silence();
     if (!running && loop) { clearInterval(loop); loop = null; }
   };
@@ -133,12 +134,61 @@
     save();
     try { localStorage.removeItem('rt:' + rk); } catch {}
     document.dispatchEvent(new CustomEvent('rt-reset', { detail: rk }));
+    const c = getCurrent(); if (c && c.rk === rk) setCurrent(null);
     tick();
   }
+
+  /* ---------- "Cooking now": a mini window for the current recipe when it isn't on screen ---------- */
+  const getCurrent = () => load('rt-current', null);
+  function setCurrent(c) { if (c) store('rt-current', c); else { try { localStorage.removeItem('rt-current'); } catch {} } pip(); }
+  function pip() {
+    let el = document.querySelector('.rt-pip');
+    const c = getCurrent();
+    const going = c && inProgress().find((x) => x.rk === c.rk);
+    if (c && !going) setCurrent(null); // finished or reset: forget it
+    const onScreen = c && [...document.querySelectorAll('.rt-wrap[data-rk]')].some((w) => w.dataset.rk === c.rk && w.offsetParent !== null);
+    if (!going || onScreen || !document.body) { if (el) el.remove(); return; }
+    const timers = Object.entries(T).filter(([k, s]) => rkOf(k) === c.rk && s.state !== 'idle');
+    const ticks = going.ticks, total = c.total || 0;
+    const min = load('rt-pip-min', false);
+    const sig = JSON.stringify([c.rk, min, ticks, timers.map(([k, s]) => k + s.state)]);
+    if (el && el.dataset.sig === sig) return; // only rebuild when something changed; times are painted live
+    if (!el) { el = document.createElement('aside'); el.className = 'rt-pip'; document.body.append(el); }
+    el.dataset.sig = sig;
+    el.classList.toggle('min', min);
+    el.setAttribute('aria-label', t('Cooking now'));
+    const rows = timers.map(([k, s]) => `<li class="pip-tm" data-tm="${esc(k)}" data-state="${s.state}">
+        <span class="pip-step">${esc(s.step)}</span><span class="tm-time"></span>
+        <button type="button" class="btn" data-tm-act="toggle" data-tm-key="${esc(k)}"></button></li>`).join('');
+    el.innerHTML = `
+      <div class="pip-head" data-pip-toggle role="button" tabindex="0" aria-expanded="${!min}">
+        <span class="pip-emoji" aria-hidden="true">${esc(c.emoji || '🍳')}</span>
+        <span class="pip-name"><small>${esc(t('Cooking now'))}</small><b>${esc(c.title)}</b></span>
+        ${min && timers[0] ? `<span class="pip-mini-time" data-tm="${esc(timers[0][0])}"><span class="tm-time"></span><span hidden data-tm-act="toggle"></span></span>` : ''}
+        <svg class="pip-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="pip-body">
+        ${total ? `<div class="pip-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${ticks}"><i style="width:${Math.min(100, (ticks / total) * 100)}%"></i></div>
+          <small class="pip-count">${esc(t('{done} of {total} steps done', { done: ticks, total }))}</small>` : ''}
+        ${rows ? `<ul class="pip-timers">${rows}</ul>` : ''}
+        <a class="btn primary pip-open" href="${esc(c.url || '/')}">${esc(t('Open recipe'))}</a>
+      </div>`;
+    paintAll();
+  }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-pip-toggle]') || e.target.closest('[data-tm-act]')) return;
+    store('rt-pip-min', !load('rt-pip-min', false)); pip();
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-pip-toggle]')) { e.preventDefault(); store('rt-pip-min', !load('rt-pip-min', false)); pip(); document.querySelector('[data-pip-toggle]')?.focus(); }
+  });
+  document.addEventListener('rt-progress', () => pip());
+  addEventListener('storage', (e) => { if (e.key && e.key.startsWith('rt')) pip(); }); // other tabs
   // Ask before starting work on a recipe while another one is going; on "stop", reset that one first.
-  function claim(rk, title, proceed) {
+  function claim(rk, title, proceed, meta = {}) {
+    const go = () => { proceed(); setCurrent({ rk, title, ...meta }); };
     const others = inProgress().filter((x) => x.rk !== rk);
-    if (!others.length) return proceed();
+    if (!others.length) return go();
     const reasons = (o) => [
       ...o.timers.map((s) => `${s.state === 'ring' ? '⏰' : s.state === 'pause' ? '⏸' : '⏱'} ${t(s.state === 'ring' ? 'Timer ringing: {step}' : s.state === 'pause' ? 'Timer paused: {step} ({left} left)' : 'Timer still running: {step} ({left} left)', { step: s.step, left: fmt(left(s)) })}`),
       ...(o.ticks ? [`✓ ${o.ticks === 1 ? t('1 step ticked off') : t('{n} steps ticked off', { n: o.ticks })}`] : []),
@@ -158,7 +208,7 @@
     d.addEventListener('close', () => {
       const stop = d.returnValue === 'stop';
       d.remove();
-      if (stop) { others.forEach((o) => stopRecipe(o.rk)); proceed(); }
+      if (stop) { others.forEach((o) => stopRecipe(o.rk)); go(); }
     });
     d.showModal();
   }
@@ -170,7 +220,7 @@
     if (!s) return;
     audio(); // a click is the user gesture browsers need before they allow sound later
     if (a === 'toggle' && s.state === 'idle' && !s._claimed) {
-      return claim(rkOf(k), s.title, () => { s._claimed = true; act(a, k); delete s._claimed; });
+      return claim(rkOf(k), s.title, () => { s._claimed = true; act(a, k); delete s._claimed; }, { emoji: s.emoji, url: s.url, total: s.total });
     }
     if (a === 'toggle') {
       if (s.state === 'run') { s.left = left(s); s.state = 'pause'; s.end = null; }
@@ -255,13 +305,14 @@
   function timed(recipe) {
     return (recipe.steps || []).map((s, i) => ({ i, text: s.text, d: parse(s.text) })).filter((x) => x.d);
   }
-  function section(recipe) {
+  function section(recipe, meta = {}) {
     const items = timed(recipe);
     if (!items.length) return '';
     for (const x of items) {
       const k = keyFor(recipe, x.i), s = T[k];
       if (!s) T[k] = { title: recipe.title, step: x.text, label: x.d.label, dur: x.d.secs, state: 'idle' };
       else if (s.state === 'idle' && s.label !== x.d.label) Object.assign(s, { step: x.text, label: x.d.label, dur: x.d.secs });
+      Object.assign(T[k], { emoji: recipe.emoji, url: meta.url, total: meta.total });
     }
     save();
     return `
@@ -293,7 +344,8 @@
       </section>`;
   }
 
-  window.RecipeTimers = { parse, section, keyFor, paintAll, timed, claim };
+  window.RecipeTimers = { parse, section, keyFor, paintAll, timed, claim, pip };
+  document.addEventListener('DOMContentLoaded', pip);
   // Timers left running (or rung) before a reload pick up where they were.
   if (Object.values(T).some((s) => s.state === 'run' || s.state === 'ring')) { ensureLoop(); setTimeout(tick, 0); }
 })();

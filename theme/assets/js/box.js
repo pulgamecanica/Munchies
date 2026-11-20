@@ -57,10 +57,10 @@
     const v = root.querySelector('#viewer');
     const saved = S.recipes.some((r) => r.id === recipe.id);
     const keep = (r) => { const i = S.recipes.findIndex((x) => x.id === r.id); if (i < 0) S.recipes.push(r); else S.recipes[i] = r; draw(); };
-    S.table = render(recipe, v, { stock: S.stock, collections: collectionsFor(() => S.cols, keep),
+    S.table = render(recipe, v, { stock: S.stock, url: '/my/?open=' + encodeURIComponent(recipe.id), collections: collectionsFor(() => S.cols, keep),
       onEdit: (r) => { if (S.recipes.some((x) => x.id === r.id)) api('/api/recipes', r).catch((x) => say(x.message)); }, actions: [
       saved
-        ? { label: t('Move to trash'), run: async (r) => { const res = await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; S.table = null; draw(); trashed(res); } }
+        ? { label: t('Move to trash'), run: async (r) => { const res = await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; v.removeAttribute('data-rk'); S.table = null; draw(); trashed(res); } }
         : { label: t('Save'), primary: true, run: async (r) => { keep(await api('/api/recipes', r)); say(t('Saved ✓')); open(r); } },
       translateAction(recipe, (tr) => { S.me.usage.used++; draw(); open(tr); }),
       { label: t('Cooked it: use up stock'), run: (r) => {
@@ -439,6 +439,7 @@
       <a class="trash-link" href="/my/trash/"><span class="trash-ico" aria-hidden="true"></span>${esc(t('Trash'))}${S.trashCount ? ` <small>${S.trashCount}</small>` : ''}</a>`;
     if (keep) root.querySelector('#viewer').replaceWith(viewer);
     if (S.table && keep) S.table.redraw(S.stock);
+    if (window.RecipeTimers) window.RecipeTimers.pip();
   }
 
   root.addEventListener('click', (e) => {
@@ -600,8 +601,11 @@
 
   Promise.all([api('/api/me'), api('/api/stock'), api('/api/recipes'), api('/api/collections?lang=' + lang), api('/api/tags')])
     .then(([me, stock, recipes, cols, tags]) => { Object.assign(S, { me, stock, recipes, cols, tags: tags.tags, tagMode: tags.mode }); draw();
+      const want = new URLSearchParams(location.search).get('open');
+      const r = want && S.recipes.find((x) => x.id === want);
+      if (r) open(r);
       api('/api/trash').then((tr) => { S.trashCount = tr.length; draw(); }).catch(() => {});
       if (me.ai && stock.length) { S.daily = 'loading'; draw(); }
-      api('/api/daily?lang=' + lang).then((dd) => { S.daily = dd; draw(); }).catch(() => { S.daily = null; draw(); }); })
+      api('/api/daily?lang=' + lang).then((dd) => { S.daily = dd; draw(); if (dd && want && dd.recipe && dd.recipe.id === want) open(dd.recipe); }).catch(() => { S.daily = null; draw(); }); })
     .catch((e) => { root.innerHTML = `<p class="empty">${esc(e.message)}</p>`; });
 })();

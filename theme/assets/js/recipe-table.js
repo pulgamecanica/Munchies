@@ -75,8 +75,11 @@
     let newCol = false; // inline "new collection" form in place of the picker
     let editRow = -1; // ingredient row whose amount is being typed in
     let done;
+    // Where this recipe lives (for the "Cooking now" window) and how many steps can be ticked.
+    const meta = () => ({ emoji: recipe.emoji, url: opts.url || location.pathname + location.search, total: layout(recipe).cells.length });
+    el.dataset.rk = recipe.id || recipe.title;
     const readDone = () => { try { const v = JSON.parse(localStorage.getItem(key)); return new Set(Array.isArray(v) ? v : (v && v.d) || []); } catch { return new Set(); } };
-    const saveDone = () => { try { if (done.size) localStorage.setItem(key, JSON.stringify({ t: recipe.title, d: [...done] })); else localStorage.removeItem(key); } catch {} };
+    const saveDone = () => { try { if (done.size) localStorage.setItem(key, JSON.stringify({ t: recipe.title, d: [...done] })); else localStorage.removeItem(key); } catch {} document.dispatchEvent(new Event('rt-progress')); };
     done = readDone();
     // Another recipe was started and this one got reset (or vice versa): reload the ticks.
     document.addEventListener('rt-reset', (e) => { if ('rt:' + e.detail === key && el.isConnected) { done = readDone(); draw(); } });
@@ -145,7 +148,7 @@
           ${ingCells}${stepCells}
         </div></div>
         </div>
-        ${hasTimers && timersOpen ? window.RecipeTimers.section(recipe) : ''}
+        ${hasTimers && timersOpen ? window.RecipeTimers.section(recipe, meta()) : ''}
         ${miss.length ? `<p class="rt-shop"><b>${t('Shopping list:')}</b> ${miss.map((u) => esc(u.name)).join(', ')}</p>` : stock ? `<p class="rt-shop ok">${t('You have everything for this one.')}</p>` : ''}
         ${recipe.notes ? `<p class="rt-note">💡 ${esc(recipe.notes)}</p>` : ''}`;
     };
@@ -162,7 +165,7 @@
         const i = Number(b.dataset.i);
         if (!done.has(i) && !done.size && window.RecipeTimers) {
           // First tick = starting this recipe: check nothing else is cooking.
-          return window.RecipeTimers.claim(recipe.id || recipe.title, recipe.title, () => { done.add(i); saveDone(); draw(); });
+          return window.RecipeTimers.claim(recipe.id || recipe.title, recipe.title, () => { done.add(i); saveDone(); draw(); }, meta());
         }
         done.has(i) ? done.delete(i) : done.add(i);
         saveDone();
@@ -204,7 +207,7 @@
       drawAll();
       // Redraws recreate the dots: start their breathing at the shared clock's phase so it never visibly restarts.
       el.style.setProperty('--rt-phase', `${-(performance.now() % 2800)}ms`);
-      if (window.RecipeTimers) window.RecipeTimers.paintAll();
+      if (window.RecipeTimers) { window.RecipeTimers.paintAll(); window.RecipeTimers.pip(); }
     };
     draw();
     return { redraw: (stock) => { if (stock) opts.stock = stock; if (editRow < 0) draw(); } };

@@ -817,3 +817,32 @@ script[type="application/recipe+json"] { display: none; }
 .rt-confirm .row { justify-content: flex-end; }
 .btn.danger-solid { background: var(--tomato); border-color: var(--tomato); color: var(--dish-ink); }
 .tm-ground { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; opacity: .35; }
+
+/* "Cooking now": picture-in-picture for the recipe in progress */
+.rt-pip { position: fixed; right: 16px; bottom: 16px; z-index: 60; width: min(320px, calc(100vw - 32px)); border: 3px solid var(--accent); border-radius: 20px; background: var(--card); color: var(--ink);
+  box-shadow: 0 24px 50px -20px rgba(0,0,0,.45); overflow: hidden; animation: pip-in .35s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes pip-in { from { opacity: 0; transform: translateY(20px) scale(.92); } }
+.pip-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; background: var(--accent); color: var(--accent-ink); }
+.pip-head:focus-visible { outline: 3px solid var(--butter); outline-offset: -3px; }
+.pip-emoji { font-size: 28px; line-height: 1; }
+.pip-name { display: grid; min-width: 0; flex: 1; text-align: left; }
+.pip-name small { font-size: 11.5px; font-weight: 700; opacity: .85; }
+.pip-name b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-mini-time .tm-time { font: 900 16px var(--sans); font-variant-numeric: tabular-nums; }
+.pip-chev { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s; }
+.rt-pip.min .pip-chev { transform: rotate(180deg); }
+.pip-body { display: grid; gap: 8px; padding: 12px; }
+.rt-pip.min .pip-body { display: none; }
+.pip-progress { height: 8px; border-radius: 999px; background: var(--cell); overflow: hidden; }
+.pip-progress i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .4s; }
+.pip-count { color: var(--muted); font-weight: 600; }
+.pip-timers { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pip-tm { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 12px; background: var(--cell); }
+.pip-tm[data-state="ring"] { background: color-mix(in srgb, var(--tomato) 18%, var(--card)); }
+.pip-step { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pip-tm .tm-time { font-size: 16px; min-width: 0; }
+.pip-tm .btn { padding: 4px 10px; font-size: 12.5px; }
+.pip-open { justify-content: center; }
+@media (max-width: 720px) { .rt-pip { bottom: calc(84px + env(safe-area-inset-bottom)); right: 12px; width: min(300px, calc(100vw - 24px)); } }
+@media (prefers-reduced-motion: reduce) { .rt-pip { animation: none; } }
+@media print { .rt-pip { display: none !important; } }
