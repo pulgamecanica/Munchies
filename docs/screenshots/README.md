@@ -1,6 +1,6 @@
 # Screenshots
 
-The main README shows these files. Drop a PNG in this folder under each name and it appears in the gallery. Files that are missing just show their caption.
+The main README shows these files.
 
 | File | What to capture |
 |---|---|
@@ -14,5 +14,3 @@ The main README shows these files. Drop a PNG in this folder under each name and
 | `admin.png` | The admin center: the analytics tiles and the chart |
 | `how-to-read.png` | The "How to read a recipe" player mid-scene (drawing + highlighted table + caption) |
 | `phone.png` | Any page at phone width, with the bottom tab bar visible |
-
-Tip: about 1600px wide for desktop shots and 390–430px for the phone shot keeps the README light.
