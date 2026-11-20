@@ -963,3 +963,15 @@ script[type="application/recipe+json"] { display: none; }
 
 /* the collections title always draws above the stacks */
 .collections > .sec-head { position: relative; z-index: 25; }
+
+/* Signed-in members never see "Sign up" (Ghost's default secondary navigation shows it to everyone) */
+body[data-member] .nav-sign-up,
+body[data-member] .foot a[href="#/portal/"],
+body[data-member] .foot a[href="#/portal/signup"],
+body[data-member] .foot a[href$="/#/portal/signup"] { display: none; }
+
+/* Phones: when Explore wraps under the ingredient field, it takes the full width, contents centred */
+@media (max-width: 600px) {
+  .add-row > .explore { flex: 1 1 100%; justify-content: center; }
+  .add-row > #add { flex: 1 1 100%; }
+}
