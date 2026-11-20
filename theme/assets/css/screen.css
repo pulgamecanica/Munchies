@@ -856,7 +856,8 @@ script[type="application/recipe+json"] { display: none; }
 @media print { .rt-pip { display: none !important; } }
 
 /* Editable amounts: the pencil takes no space; on hover it replaces the value in place (same size, no shift). */
-.rt-amt, .qty-n, .ex-qty { position: relative; gap: 0; }
+.rt-amt, .qty-n { position: relative; gap: 0; }
+.ex-qty { gap: 0; } /* stays position: absolute (pinned to the tile corner), which already anchors the pencil */
 :is(.rt-amt, .qty-n, .ex-qty) .pen { position: absolute; left: 50%; top: 50%; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; opacity: 0; transition: none; }
 :is(.rt-amt, .qty-n, .ex-qty):hover .pen { opacity: 1; }
 :is(.rt-amt, .qty-n, .ex-qty):hover .amt-txt { visibility: hidden; }
