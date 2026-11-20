@@ -103,7 +103,7 @@
         return `<div class="rt-ing ${c}${k === rows.length - 1 ? ' edge-b' : ''}" data-row="${k}" style="grid-row:${k + 2};grid-column:1/${n.d + 1}">` +
           (editRow === k
             ? `<input class="rt-amt-in" type="number" min="0" step="any" value="${esc(fmt((u.amount || 0) * f))}" data-amt-in="${k}" aria-label="${esc(t('Edit amount'))}: ${esc(u.name)}"> <small>${esc(u.unit || '')}</small>`
-            : `<button type="button" class="rt-amt" data-amt="${k}" title="${esc(t('Edit amount'))}"><b>${esc(amount(u, f) || '–')}</b>${PEN}</button>`) +
+            : `<button type="button" class="rt-amt" data-amt="${k}" title="${esc(t('Edit amount'))}"><b class="amt-txt">${esc(amount(u, f) || '–')}</b>${PEN}</button>`) +
           ` ${esc(u.name)}${u.optional ? ` <small>${t('optional')}</small>` : ''}` +
           // A small dot instead of text; the notice is in its tooltip (hover, focus, or tap on phones).
           (c === 'miss' || c === 'low' ? ` <button type="button" class="rt-dot ${c}" data-tip="${esc(c === 'miss' ? t('Not in your stock: to buy') : t('not enough (you have {n})', { n: `${fmt(it.qty)} ${it.unit || ''}`.trim() }))}" aria-label="${esc(c === 'miss' ? t('Not in your stock: to buy') : t('not enough (you have {n})', { n: `${fmt(it.qty)} ${it.unit || ''}`.trim() }))}"></button>` : '') + '</div>';

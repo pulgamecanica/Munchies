@@ -247,7 +247,7 @@
         <h4>${tg ? tagIcon(tg.icon) : '<span class="ticon none" aria-hidden="true"></span>'}${esc(tg ? tagName(tg) : t('Other'))} <small>${items.length}</small></h4>
         <ul class="stock">${items.map(({ s, i }) => `<li>
           <span><b>${esc(s.name)}</b> ${s.note ? `<small>${esc(s.note)}</small>` : ''}</span>
-          <span class="qty"><button type="button" data-bump="${i}" data-d="-1" aria-label="${esc(t('One less {name}', { name: s.name }))}">−</button><button type="button" class="qty-n" data-qty-edit="${i}" title="${esc(t('Edit amount'))}" aria-label="${esc(t('Edit amount'))}: ${esc(s.name)}">${esc(s.qty)} <small>${esc(s.unit)}</small><svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button><button type="button" data-bump="${i}" data-d="1" aria-label="${esc(t('One more {name}', { name: s.name }))}">+</button></span>
+          <span class="qty"><button type="button" data-bump="${i}" data-d="-1" aria-label="${esc(t('One less {name}', { name: s.name }))}">−</button><button type="button" class="qty-n" data-qty-edit="${i}" title="${esc(t('Edit amount'))}" aria-label="${esc(t('Edit amount'))}: ${esc(s.name)}"><span class="amt-txt">${esc(s.qty)} <small>${esc(s.unit)}</small></span><svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button><button type="button" data-bump="${i}" data-d="1" aria-label="${esc(t('One more {name}', { name: s.name }))}">+</button></span>
         </li>`).join('')}</ul>
       </div>`).join('');
   }
@@ -351,7 +351,7 @@
       return `<li class="ex-tile${it ? ' has' : ''}" data-ex="${esc(name)}">
         <button type="button" class="ex-add" aria-label="${esc(t('One more {name}', { name }))}">
           <span class="ex-emoji" aria-hidden="true">${emoji ? esc(emoji) : tg ? tagIcon(tg.icon) : '🥄'}</span><span class="ex-name">${esc(name)}</span></button>
-        ${it ? `<button type="button" class="ex-qty" data-ex-qty title="${esc(t('Edit amount'))}" aria-label="${esc(t('Edit amount'))}: ${esc(name)}">${esc(it.qty)}<small> ${esc(it.unit)}</small><svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button><button type="button" class="ex-minus" data-ex-minus aria-label="${esc(t('One less {name}', { name }))}">−</button>` : ''}
+        ${it ? `<button type="button" class="ex-qty" data-ex-qty title="${esc(t('Edit amount'))}" aria-label="${esc(t('Edit amount'))}: ${esc(name)}"><span class="amt-txt">${esc(it.qty)}<small> ${esc(it.unit)}</small></span><svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button><button type="button" class="ex-minus" data-ex-minus aria-label="${esc(t('One less {name}', { name }))}">−</button>` : ''}
       </li>`;
     };
     const match = (names) => !q || names.some((n) => n.includes(q));
