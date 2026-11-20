@@ -738,8 +738,9 @@ script[type="application/recipe+json"] { display: none; }
 .tm-grid i.gone { opacity: .12; transform: scale(.55); }
 .tm-tree svg { width: 100%; height: 100%; overflow: visible; }
 .tm-trunk { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
-.tm-tree .lf { fill: var(--basil); transform-box: fill-box; transform-origin: center; transition: transform 1.6s cubic-bezier(.5, 0, .7, .3), opacity 1.6s, fill .6s; }
-.tm-tree .lf.gone { fill: #b5762f; opacity: 0; transform: translate(6px, 34px) rotate(140deg); }
+.tm-trunk { stroke-dasharray: 1; stroke-dashoffset: calc(1 - min(1, var(--p, 0) * 5)); transition: stroke-dashoffset .4s; }
+.tm-tree .lf { fill: var(--basil); transform-box: fill-box; transform-origin: center bottom; opacity: 0; transform: scale(0); transition: transform .9s cubic-bezier(.3, 1.6, .5, 1), opacity .5s; }
+.tm-tree .lf.on { opacity: 1; transform: scale(1); }
 
 /* inside the step cell: a small live badge; optional black-out cover that melts away as time runs down (--tp) */
 .tm-badge { position: absolute; top: 6px; right: 6px; z-index: 4; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 5px; border-radius: 999px;
@@ -790,7 +791,7 @@ script[type="application/recipe+json"] { display: none; }
 /* "to buy" / "not enough": a discreet dot that barely breathes; the notice is in a tooltip */
 .rt-ing.miss, .rt-ing.low { box-shadow: none; }
 .rt-dot { flex: none; position: relative; width: 16px; height: 16px; margin: 0 0 0 2px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: help; vertical-align: middle; }
-.rt-dot::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--tomato); animation: rt-breathe 2.8s ease-in-out infinite; }
+.rt-dot::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--tomato); animation: rt-breathe 2.8s ease-in-out var(--rt-phase, 0ms) infinite; }
 .rt-dot.low::before { background: #e5a000; }
 .rt-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @keyframes rt-breathe { 50% { transform: scale(.78); opacity: .72; } }
@@ -803,3 +804,16 @@ script[type="application/recipe+json"] { display: none; }
 .rt-controls .rt-clock[aria-pressed="true"] { background: var(--accent-ink); color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .rt-dot::before { animation: none; } }
 @media print { .rt-dot, .rt-tip { display: none !important; } }
+
+/* "Stop preparing …?": everything behind it goes opaque */
+.rt-confirm { width: min(560px, calc(100vw - 32px)); padding: 0; border: 3px solid var(--accent); border-radius: 24px; background: var(--card); color: var(--ink); }
+.rt-confirm::backdrop { background: color-mix(in srgb, var(--bg) 94%, var(--ink)); }
+.rt-confirm[open] { animation: drop-in .2s ease-out; }
+.rt-confirm form { display: grid; gap: 14px; padding: 24px; }
+.rt-confirm h2 { margin: 0; font-size: clamp(24px, 4vw, 32px); line-height: 1.05; }
+.rt-confirm p { margin: 0; color: var(--muted); }
+.rt-confirm-why { padding: 12px 14px; border-radius: 14px; background: var(--cell); }
+.rt-confirm-why ul { margin: 6px 0 0; padding-left: 0; list-style: none; display: grid; gap: 4px; font-weight: 600; }
+.rt-confirm .row { justify-content: flex-end; }
+.btn.danger-solid { background: var(--tomato); border-color: var(--tomato); color: var(--dish-ink); }
+.tm-ground { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; opacity: .35; }

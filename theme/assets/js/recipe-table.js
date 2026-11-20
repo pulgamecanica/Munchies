@@ -75,7 +75,11 @@
     let newCol = false; // inline "new collection" form in place of the picker
     let editRow = -1; // ingredient row whose amount is being typed in
     let done;
-    try { done = new Set(JSON.parse(localStorage.getItem(key)) || []); } catch { done = new Set(); }
+    const readDone = () => { try { const v = JSON.parse(localStorage.getItem(key)); return new Set(Array.isArray(v) ? v : (v && v.d) || []); } catch { return new Set(); } };
+    const saveDone = () => { try { if (done.size) localStorage.setItem(key, JSON.stringify({ t: recipe.title, d: [...done] })); else localStorage.removeItem(key); } catch {} };
+    done = readDone();
+    // Another recipe was started and this one got reset (or vice versa): reload the ticks.
+    document.addEventListener('rt-reset', (e) => { if ('rt:' + e.detail === key && el.isConnected) { done = readDone(); draw(); } });
 
     let draw = () => {
       const f = servings / base;
@@ -156,8 +160,12 @@
       if (b.dataset.amt) { editRow = Number(b.dataset.amt); draw(); const i = el.querySelector('[data-amt-in]'); i.focus(); i.select(); return; }
       if (b.dataset.i) {
         const i = Number(b.dataset.i);
+        if (!done.has(i) && !done.size && window.RecipeTimers) {
+          // First tick = starting this recipe: check nothing else is cooking.
+          return window.RecipeTimers.claim(recipe.id || recipe.title, recipe.title, () => { done.add(i); saveDone(); draw(); });
+        }
         done.has(i) ? done.delete(i) : done.add(i);
-        try { localStorage.setItem(key, JSON.stringify([...done])); } catch {}
+        saveDone();
       } else if (b.dataset.scale) servings = Math.max(1, Math.round(base * Number(b.dataset.scale) * 10) / 10);
       else if (b.hasAttribute('data-print')) return printDialog(recipe);
       else if (b.hasAttribute('data-copy')) {
@@ -192,7 +200,12 @@
       if (e.target.dataset.col !== undefined && e.target.value) { await opts.collections.pick(recipe, e.target.value); draw(); }
     };
     const drawAll = draw;
-    draw = () => { drawAll(); if (window.RecipeTimers) window.RecipeTimers.paintAll(); };
+    draw = () => {
+      drawAll();
+      // Redraws recreate the dots: start their breathing at the shared clock's phase so it never visibly restarts.
+      el.style.setProperty('--rt-phase', `${-(performance.now() % 2800)}ms`);
+      if (window.RecipeTimers) window.RecipeTimers.paintAll();
+    };
     draw();
     return { redraw: (stock) => { if (stock) opts.stock = stock; if (editRow < 0) draw(); } };
   }

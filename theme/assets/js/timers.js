@@ -110,12 +110,68 @@
     if (!d.open) { d.showModal(); d.querySelector('[data-tm-act="ack"]')?.focus(); }
   }
 
+  /* ---------- one recipe in progress at a time ---------- */
+  // A recipe is "in progress" when one of its timers isn't idle or one of its steps is ticked off.
+  const rkOf = (k) => k.slice(0, k.lastIndexOf(':'));
+  function inProgress() {
+    const by = {};
+    const get = (rk, title) => (by[rk] ||= { rk, title: title || rk, timers: [], ticks: 0 });
+    for (const [k, s] of Object.entries(T)) if (s.state !== 'idle') get(rkOf(k), s.title).timers.push(s);
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith('rt:')) continue;
+        const v = JSON.parse(localStorage.getItem(k));
+        const d = Array.isArray(v) ? v : (v && v.d) || [];
+        if (d.length) { const e = get(k.slice(3), v && v.t); e.ticks = d.length; if (v && v.t) e.title = v.t; }
+      }
+    } catch {}
+    return Object.values(by);
+  }
+  function stopRecipe(rk) {
+    for (const [k, s] of Object.entries(T)) if (rkOf(k) === rk) Object.assign(s, { state: 'idle', end: null, left: null });
+    save();
+    try { localStorage.removeItem('rt:' + rk); } catch {}
+    document.dispatchEvent(new CustomEvent('rt-reset', { detail: rk }));
+    tick();
+  }
+  // Ask before starting work on a recipe while another one is going; on "stop", reset that one first.
+  function claim(rk, title, proceed) {
+    const others = inProgress().filter((x) => x.rk !== rk);
+    if (!others.length) return proceed();
+    const reasons = (o) => [
+      ...o.timers.map((s) => `${s.state === 'ring' ? '⏰' : s.state === 'pause' ? '⏸' : '⏱'} ${t(s.state === 'ring' ? 'Timer ringing: {step}' : s.state === 'pause' ? 'Timer paused: {step} ({left} left)' : 'Timer still running: {step} ({left} left)', { step: s.step, left: fmt(left(s)) })}`),
+      ...(o.ticks ? [`✓ ${o.ticks === 1 ? t('1 step ticked off') : t('{n} steps ticked off', { n: o.ticks })}`] : []),
+    ];
+    const name = others.map((o) => `“${o.title}”`).join(', ');
+    const d = document.createElement('dialog');
+    d.className = 'rt-confirm';
+    d.setAttribute('aria-labelledby', 'rt-confirm-h');
+    d.innerHTML = `<form method="dialog">
+      <h2 id="rt-confirm-h">${esc(t('Stop preparing {name}?', { name }))}</h2>
+      <p>${esc(t('You can cook one recipe at a time. Starting “{next}” resets {name}, so none of its timers go off later.', { next: title, name }))}</p>
+      ${others.map((o) => `<div class="rt-confirm-why"><b>${esc(t('Still going in “{name}”:', { name: o.title }))}</b><ul>${reasons(o).map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>`).join('')}
+      <div class="row"><button class="btn" value="keep" autofocus>${esc(t('Keep cooking {name}', { name }))}</button>
+      <button class="btn danger-solid" value="stop">${esc(t('Stop and start “{next}”', { next: title }))}</button></div>
+    </form>`;
+    document.body.append(d);
+    d.addEventListener('close', () => {
+      const stop = d.returnValue === 'stop';
+      d.remove();
+      if (stop) { others.forEach((o) => stopRecipe(o.rk)); proceed(); }
+    });
+    d.showModal();
+  }
+
   /* ---------- actions ---------- */
   function act(a, k) {
     const s = T[k];
     if (a === 'ackall') { Object.values(T).forEach((x) => { if (x.state === 'ring') x.state = 'idle'; }); save(); return tick(); }
     if (!s) return;
     audio(); // a click is the user gesture browsers need before they allow sound later
+    if (a === 'toggle' && s.state === 'idle' && !s._claimed) {
+      return claim(rkOf(k), s.title, () => { s._claimed = true; act(a, k); delete s._claimed; });
+    }
     if (a === 'toggle') {
       if (s.state === 'run') { s.left = left(s); s.state = 'pause'; s.end = null; }
       else { s.end = Date.now() + (s.state === 'pause' ? s.left : s.dur) * 1000; s.state = 'run'; }
@@ -149,13 +205,18 @@
     const cls = `tm-vis tm-${style}${small ? ' sm' : ''}`;
     if (style === 'clock') return `<span class="${cls}" data-style="clock" aria-hidden="true"><i class="tm-hand"></i></span>`;
     if (style === 'grid') return `<span class="${cls}" data-style="grid" aria-hidden="true">${'<i></i>'.repeat(small ? 12 : 30)}</span>`;
-    if (style === 'tree') return `<span class="${cls}" data-style="tree" aria-hidden="true"><svg viewBox="0 0 60 60"><path class="tm-trunk" d="M30 58V36M30 46 20 36M30 42 40 32M30 36 25 24M30 36 36 22"/>${LEAVES.map(([x, y]) => `<ellipse class="lf" cx="${x}" cy="${y}" rx="4.2" ry="3"/>`).join('')}</svg></span>`;
+    if (style === 'tree') return `<span class="${cls}" data-style="tree" aria-hidden="true"><svg viewBox="0 0 60 60"><path class="tm-ground" d="M16 58.5h28"/><path class="tm-trunk" pathLength="1" d="M30 58V36M30 46 20 36M30 42 40 32M30 36 25 24M30 36 36 22"/>${LEAVES.map(([x, y]) => `<ellipse class="lf" cx="${x}" cy="${y}" rx="4.2" ry="3"/>`).join('')}</svg></span>`;
     return `<span class="${cls}" data-style="countdown" aria-hidden="true"><i class="tm-bar"></i></span>`;
   }
   function paintVis(vis, p) {
     if (vis.dataset.style !== P.style) { const n = document.createElement('span'); n.innerHTML = visual(P.style, vis.classList.contains('sm')); vis.replaceWith(vis = n.firstChild); }
     vis.style.setProperty('--p', p);
-    const parts = vis.querySelectorAll(P.style === 'tree' ? '.lf' : P.style === 'grid' ? 'i' : 'x');
+    if (P.style === 'tree') { // grows: leaves sprout as time passes, full tree at zero
+      const leaves = vis.querySelectorAll('.lf'), grown = Math.round(Math.max(0, (p - 0.2) / 0.8) * leaves.length);
+      leaves.forEach((x, i) => x.classList.toggle('on', i < grown));
+      return;
+    }
+    const parts = vis.querySelectorAll(P.style === 'grid' ? 'i' : 'x');
     const gone = Math.round(p * parts.length);
     parts.forEach((x, i) => x.classList.toggle('gone', i < gone));
   }
@@ -232,7 +293,7 @@
       </section>`;
   }
 
-  window.RecipeTimers = { parse, section, keyFor, paintAll, timed };
+  window.RecipeTimers = { parse, section, keyFor, paintAll, timed, claim };
   // Timers left running (or rung) before a reload pick up where they were.
   if (Object.values(T).some((s) => s.state === 'run' || s.state === 'ring')) { ensureLoop(); setTimeout(tick, 0); }
 })();
