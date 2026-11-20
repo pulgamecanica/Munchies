@@ -13,6 +13,17 @@
   const matches = (a, b) => { const wb = words(b); return words(a).some((w) => wb.includes(w)); };
   const findStock = (stock, name) => (stock || []).find((s) => s.qty > 0 && matches(name, s.name));
   const fmt = (n) => (!n && n !== 0 ? '' : String(n < 10 ? Math.round(n * 10) / 10 : Math.round(n)));
+  // Same ingredient? Compare lowercase, accents/spaces/symbols removed ("Olive Oil" = "olive-oil").
+  const norm = (s) => strip(s).replace(/[^a-z0-9]/g, '');
+  // Enough of it? Only when both amounts are in comparable units (weight, volume or pieces); otherwise assume yes.
+  const UNITS = { mg: ['w', 0.001], g: ['w', 1], gr: ['w', 1], gram: ['w', 1], kg: ['w', 1000], ml: ['v', 1], cl: ['v', 10], dl: ['v', 100], l: ['v', 1000],
+    tsp: ['v', 5], tbsp: ['v', 15], cup: ['v', 240], pc: ['n', 1], pcs: ['n', 1], piece: ['n', 1], '': ['n', 1] };
+  const inBase = (q, unit) => { const u = UNITS[strip(unit || '').replace(/s$/, '')] || UNITS[strip(unit || '')]; return u ? [u[0], Number(q) * u[1]] : null; };
+  const shortOf = (item, need, unit) => {
+    if (!item || !need) return 0;
+    const a = inBase(item.qty, item.unit), b = inBase(need, unit);
+    return a && b && a[0] === b[0] && a[1] < b[1] - 1e-9 ? 1 : 0;
+  };
   const amount = (u, f) => [u.amount ? fmt(u.amount * f) : '', u.unit || ''].join(' ').trim();
 
   function layout(recipe) {
@@ -39,10 +50,10 @@
     return { rows, cells, prep: nodes.filter((n) => !has(n)), cols: root.d };
   }
 
-  const missingOf = (recipe, stock) => {
+  const missingOf = (recipe, stock, f = 1) => {
     const seen = new Set();
     return (recipe.steps || []).flatMap((s) => s.uses || [])
-      .filter((u) => !u.optional && !isStaple(u.name) && !findStock(stock, u.name) && !seen.has(strip(u.name)) && seen.add(strip(u.name)));
+      .filter((u) => !u.optional && !isStaple(u.name) && (!findStock(stock, u.name) || shortOf(findStock(stock, u.name), (u.amount || 0) * f, u.unit)) && !seen.has(norm(u.name)) && seen.add(norm(u.name)));
   };
 
   function toMarkdown(recipe, f) {
@@ -62,24 +73,41 @@
     const key = 'rt:' + (recipe.id || recipe.title);
     let servings = base;
     let newCol = false; // inline "new collection" form in place of the picker
+    let editRow = -1; // ingredient row whose amount is being typed in
     let done;
     try { done = new Set(JSON.parse(localStorage.getItem(key)) || []); } catch { done = new Set(); }
 
-    const draw = () => {
+    let draw = () => {
       const f = servings / base;
       const { rows, cells, prep, cols } = layout(recipe);
       const stock = opts.stock;
-      const miss = stock ? missingOf(recipe, stock) : [];
+      const miss = stock ? missingOf(recipe, stock, servings / base) : [];
       const srcUrl = recipe.source && /^https?:\/\/[^/]/i.test(recipe.source.url || '') ? recipe.source.url : '';
       const srcName = (recipe.source && recipe.source.name) || (srcUrl && srcUrl.split('/')[2]);
-      const cls = (u) => (!stock || isStaple(u.name) || findStock(stock, u.name) ? '' : u.optional ? 'opt' : 'miss');
-      const ingCells = rows.map(({ u, n }, k) =>
-        `<div class="rt-ing ${cls(u)}${k === rows.length - 1 ? ' edge-b' : ''}" data-row="${k}" style="grid-row:${k + 2};grid-column:1/${n.d + 1}">` +
-        `<b>${esc(amount(u, f))}</b> ${esc(u.name)}${u.optional ? ` <small>${t('optional')}</small>` : ''}${cls(u) === 'miss' ? ` <small class="buy">· ${t('to buy')}</small>` : ''}</div>`).join('');
+      const cls = (u) => {
+        if (!stock || isStaple(u.name)) return '';
+        const it = findStock(stock, u.name);
+        if (!it) return u.optional ? 'opt' : 'miss';
+        return shortOf(it, (u.amount || 0) * f, u.unit) ? 'low' : '';
+      };
+      const PEN = '<svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg>';
+      const ingCells = rows.map(({ u, n }, k) => {
+        const c = cls(u), it = c === 'low' && findStock(stock, u.name);
+        return `<div class="rt-ing ${c}${k === rows.length - 1 ? ' edge-b' : ''}" data-row="${k}" style="grid-row:${k + 2};grid-column:1/${n.d + 1}">` +
+          (editRow === k
+            ? `<input class="rt-amt-in" type="number" min="0" step="any" value="${esc(fmt((u.amount || 0) * f))}" data-amt-in="${k}" aria-label="${esc(t('Edit amount'))}: ${esc(u.name)}"> <small>${esc(u.unit || '')}</small>`
+            : `<button type="button" class="rt-amt" data-amt="${k}" title="${esc(t('Edit amount'))}"><b>${esc(amount(u, f) || '–')}</b>${PEN}</button>`) +
+          ` ${esc(u.name)}${u.optional ? ` <small>${t('optional')}</small>` : ''}` +
+          // A small dot instead of text; the notice is in its tooltip (hover, focus, or tap on phones).
+          (c === 'miss' || c === 'low' ? ` <button type="button" class="rt-dot ${c}" data-tip="${esc(c === 'miss' ? t('Not in your stock: to buy') : t('not enough (you have {n})', { n: `${fmt(it.qty)} ${it.unit || ''}`.trim() }))}" aria-label="${esc(c === 'miss' ? t('Not in your stock: to buy') : t('not enough (you have {n})', { n: `${fmt(it.qty)} ${it.unit || ''}`.trim() }))}"></button>` : '') + '</div>';
+      }).join('');
+      const timedSteps = new Set(window.RecipeTimers && opts.timers !== false ? window.RecipeTimers.timed(recipe).map((x) => x.i) : []);
+      const hasTimers = timedSteps.size > 0;
+      let timersOpen = false; try { timersOpen = localStorage.getItem('rt-timers-open') === '1'; } catch {}
       // Convergence as colour: steps deepen toward the final column; the last step is the dish.
       const depth = (n) => Math.round(12 + 76 * (n.d - 1) / Math.max(1, cols - 1));
       const stepCells = cells.map((n) =>
-        `<button type="button" class="rt-step${!n.parent ? ' dish' : depth(n) >= 50 ? ' deep' : ''}${n.r1 === rows.length ? ' edge-b' : ''}${!n.parent ? ' edge-r' : ''}${done.has(n.i) ? ' done' : ''}" data-i="${n.i}" aria-pressed="${done.has(n.i)}" ` +
+        `<button type="button" class="rt-step${!n.parent ? ' dish' : depth(n) >= 50 ? ' deep' : ''}${n.r1 === rows.length ? ' edge-b' : ''}${!n.parent ? ' edge-r' : ''}${done.has(n.i) ? ' done' : ''}" data-i="${n.i}" aria-pressed="${done.has(n.i)}"${timedSteps.has(n.i) ? ` data-tm-step="${esc(window.RecipeTimers.keyFor(recipe, n.i))}"` : ''} ` +
         `style="--p:${depth(n)};` +
         `grid-row:${n.r0 + 2}/${n.r1 + 2};grid-column:${n.d + 1}/${n.parent && n.parent.d ? n.parent.d + 1 : n.d + 2}">${esc(n.s.text)}</button>`).join('');
 
@@ -104,6 +132,7 @@
           ${(opts.actions || []).map((a, i) => `<button type="button" class="btn${a.primary ? ' primary' : ''}" data-act="${i}">${esc(a.label)}</button>`).join('')}
           <button type="button" class="btn" data-copy>${t('Copy')}</button>
           <button type="button" class="btn" data-print>${t('Print')}</button>
+          ${hasTimers ? `<button type="button" class="btn icon-btn rt-clock" data-timers aria-pressed="${timersOpen}" aria-label="${esc(t('Timers'))}" title="${esc(t('Timers'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6M12 2v3"/></svg></button>` : ''}
         </div>
         ${prep.length ? `<ul class="rt-prep">${prep.map((n) => `<li>${esc(n.s.text)}</li>`).join('')}</ul>` : ''}
         <div class="rt-scroll"><div class="rt" style="--cols:${cols}">
@@ -112,6 +141,7 @@
           ${ingCells}${stepCells}
         </div></div>
         </div>
+        ${hasTimers && timersOpen ? window.RecipeTimers.section(recipe) : ''}
         ${miss.length ? `<p class="rt-shop"><b>${t('Shopping list:')}</b> ${miss.map((u) => esc(u.name)).join(', ')}</p>` : stock ? `<p class="rt-shop ok">${t('You have everything for this one.')}</p>` : ''}
         ${recipe.notes ? `<p class="rt-note">💡 ${esc(recipe.notes)}</p>` : ''}`;
     };
@@ -121,6 +151,9 @@
       const b = e.target.closest('button');
       if (!b) return;
       if (b.hasAttribute('data-newcol-cancel')) { newCol = false; return draw(); }
+      if (b.hasAttribute('data-timers')) { try { localStorage.setItem('rt-timers-open', b.getAttribute('aria-pressed') === 'true' ? '0' : '1'); } catch {} return draw(); }
+      if (b.classList.contains('rt-dot')) return; // tooltip only
+      if (b.dataset.amt) { editRow = Number(b.dataset.amt); draw(); const i = el.querySelector('[data-amt-in]'); i.focus(); i.select(); return; }
       if (b.dataset.i) {
         const i = Number(b.dataset.i);
         done.has(i) ? done.delete(i) : done.add(i);
@@ -140,13 +173,28 @@
       if (name) await opts.collections.create(recipe, name);
       newCol = false; draw();
     };
+    // Typed amounts are stored per serving base, so scaling keeps working; opts.onEdit saves the recipe where it lives.
+    const commitAmount = (input) => {
+      const k = Number(input.dataset.amtIn), v = Number(input.value), row = layout(recipe).rows[k];
+      editRow = -1;
+      if (row && Number.isFinite(v) && v >= 0) { row.u.amount = v / (servings / base); if (opts.onEdit) opts.onEdit(recipe); }
+      draw();
+    };
+    el.onkeydown = (e) => {
+      if (!e.target.dataset || e.target.dataset.amtIn === undefined) return;
+      if (e.key === 'Enter') { e.preventDefault(); commitAmount(e.target); }
+      if (e.key === 'Escape') { editRow = -1; draw(); }
+    };
+    el.addEventListener('focusout', (e) => { if (e.target.dataset && e.target.dataset.amtIn !== undefined && editRow >= 0) commitAmount(e.target); });
     el.onchange = async (e) => {
       if (e.target.dataset.serv !== undefined) { servings = Math.max(1, Number(e.target.value) || base); draw(); }
       if (e.target.dataset.col !== undefined && e.target.value === '+') { newCol = true; draw(); el.querySelector('[data-newcol-form] input').focus(); return; }
       if (e.target.dataset.col !== undefined && e.target.value) { await opts.collections.pick(recipe, e.target.value); draw(); }
     };
+    const drawAll = draw;
+    draw = () => { drawAll(); if (window.RecipeTimers) window.RecipeTimers.paintAll(); };
     draw();
-    return { redraw: (stock) => { opts.stock = stock; draw(); } };
+    return { redraw: (stock) => { if (stock) opts.stock = stock; if (editRow < 0) draw(); } };
   }
 
   /* Print dialog: the real recipe rendered as a page in every style (each theme + black & white).
@@ -156,7 +204,8 @@
   function pageMarkup(recipe) {
     const box = document.createElement('div');
     render(recipe, box, {});
-    box.querySelectorAll('.rt-controls, .rt-shop, .rt-howto').forEach((x) => x.remove()); // exactly what prints
+    box.querySelectorAll('.rt-controls, .rt-shop, .rt-howto, .rt-timers, .tm-badge, .tm-cover, .rt-dot').forEach((x) => x.remove()); // exactly what prints
+    box.querySelectorAll('.rt-amt').forEach((b) => b.replaceWith(Object.assign(document.createElement('b'), { textContent: b.textContent })));
     // Previews sit inside clickable cards, and buttons can't nest: turn the step buttons into plain blocks.
     box.querySelectorAll('button').forEach((b) => { const d = document.createElement('div'); d.className = b.className; d.setAttribute('style', b.getAttribute('style') || ''); d.innerHTML = b.innerHTML; b.replaceWith(d); });
     return box.innerHTML;
@@ -256,17 +305,18 @@
   });
 
   // Collections picker: toggling a collection saves the recipe (with its collections) to the member's kitchen.
-  const collectionsFor = (list, onSaved) => ({
-    list,
+  // `source` is the list itself or a function returning the current list, so new collections show up without a reload.
+  const collectionsFor = (source, onSaved) => ({
+    get list() { return typeof source === 'function' ? source() : source; },
     async create(recipe, name) {
       const r = await fetch('/api/collections', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       if (!r.ok) return;
-      const c = await r.json(); list.push(c);
+      const c = await r.json(); this.list.push(c);
       return this.pick(recipe, c.id);
     },
     async pick(recipe, id) {
       const has = new Set(recipe.collections || []);
-      const name = (list.find((c) => c.id === id) || {}).name;
+      const name = (this.list.find((c) => c.id === id) || {}).name;
       has.has(id) ? has.delete(id) : has.add(id);
       recipe.collections = [...has];
       const r = await fetch('/api/recipes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(recipe) });
@@ -275,7 +325,33 @@
   });
   const toast = (m) => { const d = document.createElement('div'); d.className = 'toast'; d.setAttribute('role', 'status'); d.textContent = m; document.body.append(d); setTimeout(() => d.remove(), 3000); };
 
-  window.RecipeTable = { render, layout, matches, findStock, strip, esc, isStaple, translateAction, collectionsFor, toast };
+  /* Tooltips for [data-tip]: hover or keyboard focus on desktop, tap on touch screens. */
+  const tip = document.createElement('div');
+  tip.className = 'rt-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true;
+  document.addEventListener('DOMContentLoaded', () => document.body.append(tip));
+  let tipFor = null;
+  const showTip = (el) => {
+    if (!tip.isConnected) document.body.append(tip);
+    tipFor = el; tip.textContent = el.dataset.tip; tip.hidden = false;
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+    const x = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+    const above = r.top - h - 10 > 8;
+    tip.style.left = x + 'px'; tip.style.top = (above ? r.top - h - 10 : r.bottom + 10) + 'px';
+    tip.dataset.side = above ? 'top' : 'bottom';
+  };
+  const hideTip = () => { tip.hidden = true; tipFor = null; };
+  document.addEventListener('pointerover', (e) => { const el = e.target.closest('[data-tip]'); if (el && e.pointerType === 'mouse') showTip(el); });
+  document.addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && tipFor && !tipFor.contains(e.relatedTarget)) hideTip(); });
+  document.addEventListener('focusin', (e) => { const el = e.target.closest('[data-tip]'); if (el) showTip(el); });
+  document.addEventListener('focusout', (e) => { if (e.target === tipFor) hideTip(); });
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (el && e.pointerType === 'mouse') return; // mice already got it on hover
+    if (el) { if (tipFor === el && !tip.hidden) hideTip(); else showTip(el); } else hideTip();
+  });
+  addEventListener('scroll', hideTip, true);
+
+  window.RecipeTable = { render, layout, matches, findStock, strip, esc, isStaple, translateAction, collectionsFor, toast, norm };
 
   // Posts: an HTML card holding <script type="application/recipe+json">{...}</script> becomes a table.
   const blocks = document.querySelectorAll('script[type="application/recipe+json"]');

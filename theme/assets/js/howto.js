@@ -120,7 +120,7 @@
     sb = data;
     // The demo recipe, rendered by the same code as every recipe on the site.
     table = document.getElementById('ht-table');
-    window.RecipeTable.render(sb.recipe, table, { head: true });
+    window.RecipeTable.render(sb.recipe, table, { head: true, timers: false });
     table.querySelectorAll('.rt-controls, .rt-howto').forEach((x) => x.remove());
     fig.querySelector('.ht-chapters').innerHTML = sb.scenes.map((s) => `<i data-id="${s.id}" style="left:${(s.start / sb.duration) * 100}%"></i>`).join('');
     // Voice-over: optional. If the file for this language (or English) is missing, the sound button says so.

@@ -25,6 +25,8 @@ No npm dependencies anywhere: Node 24 built-ins, plain browser JS, Ghost and Tes
 **For members**
 - **Recipes as convergence tables**: scale servings, tick off steps, see what's missing from your stock, translate, print.
 - **Create a recipe** from a link, pasted text or a cookbook photo (OCR first, AI vision as fallback). **Extract text only** is free.
+- **Live stock checks:** a faint red dot marks ingredients you need to buy, an amber one those you have too little of (weights and volumes are converted); the notice is in a tooltip. Amounts in recipes and stock have a pencil on hover to type a number. Adding stock (explorer, photo, by hand) updates open recipes immediately, and names are matched ignoring case, spaces and symbols, so no duplicates.
+- **Timers:** the clock next to Print opens a timer for every step with a time in it ("Bake 60 min", "1 h 20 min", in 6 languages). Four looks (countdown, clock, grid, a tree losing its leaves), optional badges inside the table and an optional black-out cover that melts away as time runs down. When a timer ends the whole screen turns into an alarm with sound and vibration until you press Done. Timers survive reloads.
 - **Today's pick**: one recipe a day from your stock, free; claim a copy into your kitchen.
 - **Collections**: three pre-filled starters plus the built-in **All**; 3D stacks you can flip through, or grid / list layouts; covers, hiding, ordering; an overview to manage them all.
 - **Stock**: add by photo, by hand, or tap tiles in the **ingredient explorer**; shelves by category with icons; **Sort my stock with AI** (limited per plan).

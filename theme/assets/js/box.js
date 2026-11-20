@@ -1,6 +1,6 @@
 /* Recipe box (/my/): make tables with AI, keep stock, cook from what you have. Talks to /api/* on the gateway. */
 (() => {
-  const { render, findStock, strip, esc, translateAction, collectionsFor } = window.RecipeTable;
+  const { render, findStock, strip, esc, translateAction, collectionsFor, norm } = window.RecipeTable;
   const t = window.t;
   const lang = window.I18N.lang;
   const root = document.getElementById('box');
@@ -28,7 +28,10 @@
   }
 
   let saveT;
-  const saveStock = () => { clearTimeout(saveT); saveT = setTimeout(() => api('/api/stock', S.stock, 'PUT').catch((e) => say(e.message)), 300); };
+  const saveStock = () => {
+    if (S.table) S.table.redraw(S.stock); // the open recipe shows have / to buy / not enough immediately
+    clearTimeout(saveT); saveT = setTimeout(() => api('/api/stock', S.stock, 'PUT').catch((e) => say(e.message)), 300);
+  };
 
   async function fileToDataUrl(file, max = 1400) {
     const url = URL.createObjectURL(file);
@@ -54,9 +57,10 @@
     const v = root.querySelector('#viewer');
     const saved = S.recipes.some((r) => r.id === recipe.id);
     const keep = (r) => { const i = S.recipes.findIndex((x) => x.id === r.id); if (i < 0) S.recipes.push(r); else S.recipes[i] = r; draw(); };
-    render(recipe, v, { stock: S.stock, collections: collectionsFor(S.cols, keep), actions: [
+    S.table = render(recipe, v, { stock: S.stock, collections: collectionsFor(() => S.cols, keep),
+      onEdit: (r) => { if (S.recipes.some((x) => x.id === r.id)) api('/api/recipes', r).catch((x) => say(x.message)); }, actions: [
       saved
-        ? { label: t('Move to trash'), run: async (r) => { const res = await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; draw(); trashed(res); } }
+        ? { label: t('Move to trash'), run: async (r) => { const res = await api('/api/recipes/' + encodeURIComponent(r.id), null, 'DELETE'); S.recipes = S.recipes.filter((x) => x.id !== r.id); v.innerHTML = ''; S.table = null; draw(); trashed(res); } }
         : { label: t('Save'), primary: true, run: async (r) => { keep(await api('/api/recipes', r)); say(t('Saved ✓')); open(r); } },
       translateAction(recipe, (tr) => { S.me.usage.used++; draw(); open(tr); }),
       { label: t('Cooked it: use up stock'), run: (r) => {
@@ -243,7 +247,7 @@
         <h4>${tg ? tagIcon(tg.icon) : '<span class="ticon none" aria-hidden="true"></span>'}${esc(tg ? tagName(tg) : t('Other'))} <small>${items.length}</small></h4>
         <ul class="stock">${items.map(({ s, i }) => `<li>
           <span><b>${esc(s.name)}</b> ${s.note ? `<small>${esc(s.note)}</small>` : ''}</span>
-          <span class="qty"><button type="button" data-bump="${i}" data-d="-1" aria-label="${esc(t('One less {name}', { name: s.name }))}">−</button>${esc(s.qty)} <small>${esc(s.unit)}</small><button type="button" data-bump="${i}" data-d="1" aria-label="${esc(t('One more {name}', { name: s.name }))}">+</button></span>
+          <span class="qty"><button type="button" data-bump="${i}" data-d="-1" aria-label="${esc(t('One less {name}', { name: s.name }))}">−</button><button type="button" class="qty-n" data-qty-edit="${i}" title="${esc(t('Edit amount'))}" aria-label="${esc(t('Edit amount'))}: ${esc(s.name)}">${esc(s.qty)} <small>${esc(s.unit)}</small><svg class="pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button><button type="button" data-bump="${i}" data-d="1" aria-label="${esc(t('One more {name}', { name: s.name }))}">+</button></span>
         </li>`).join('')}</ul>
       </div>`).join('');
   }
@@ -289,8 +293,8 @@
   /* Ingredient explorer: big tiles, tap to add one, − to take one away. Your kitchen's history first, then the catalog. */
   const LI = ['en', 'es', 'fr', 'pt', 'it', 'de'].indexOf(lang);
   const CAT = (window.INGREDIENTS || []).map(([emoji, tag, unit, ...names]) => ({ emoji, tag, unit, name: names[LI] || names[0], all: names.map(strip) }));
-  const catFor = (name) => { const k = strip(name); return CAT.find((c) => c.all.includes(k)); };
-  const inStock = (name) => S.stock.find((x) => strip(x.name) === strip(name));
+  const catFor = (name) => { const k = norm(name); return CAT.find((c) => c.all.some((n) => n.replace(/[^a-z0-9]/g, '') === k)); };
+  const inStock = (name) => S.stock.find((x) => norm(x.name) === norm(name));
   const EX = { q: '', cat: 'all', history: [] };
   let dlg;
   function openExplorer() {
@@ -309,7 +313,7 @@
       if (b.dataset.exMinus !== undefined) { if (it) { it.qty = Math.max(0, it.qty - 1); S.stock = S.stock.filter((x) => x.qty > 0); } }
       else if (it) it.qty += 1;
       else S.stock.push({ id: uid(), name, qty: 1, unit: (c && c.unit) || 'pcs', note: '', tag: (c && c.tag) || '' });
-      saveStock(); drawExplorer();
+      saveStock(); drawExplorer(); draw(); // the kitchen behind the explorer updates live too
       const tile = dlg.querySelector(`[data-ex="${CSS.escape(name)}"]`);
       if (tile) { tile.classList.remove('pop'); void tile.offsetWidth; tile.classList.add('pop'); }
     });
@@ -434,11 +438,12 @@
 
       <a class="trash-link" href="/my/trash/"><span class="trash-ico" aria-hidden="true"></span>${esc(t('Trash'))}${S.trashCount ? ` <small>${S.trashCount}</small>` : ''}</a>`;
     if (keep) root.querySelector('#viewer').replaceWith(viewer);
+    if (S.table && keep) S.table.redraw(S.stock);
   }
 
   root.addEventListener('click', (e) => {
     if (swiped) { swiped = false; return; }
-    const el = e.target.closest('[data-explore],[data-overview],[data-overview-done],[data-ov-move],[data-newcol-cancel],[data-daily-open],[data-daily-claim],[data-mode],[data-bump],[data-addfound],[data-dropfound],[data-clear],[data-rid],[data-pass],[data-expand],[data-close],[data-newcol],[data-settings],[data-settings-done],[data-move],[data-showhidden],[data-delcol],[data-sort]');
+    const el = e.target.closest('[data-qty-edit],[data-explore],[data-overview],[data-overview-done],[data-ov-move],[data-newcol-cancel],[data-daily-open],[data-daily-claim],[data-mode],[data-bump],[data-addfound],[data-dropfound],[data-clear],[data-rid],[data-pass],[data-expand],[data-close],[data-newcol],[data-settings],[data-settings-done],[data-move],[data-showhidden],[data-delcol],[data-sort]');
     if (!el) return;
     const d = el.dataset;
     const stack = el.closest('[data-stack]');
@@ -453,6 +458,27 @@
     if ('close' in d) { S.openCol = null; return draw(); }
     if ('newcol' in d) { S.newCol = !S.newCol; draw(); return root.querySelector('#newcol input')?.focus(); }
     if ('newcolCancel' in d) { S.newCol = false; return draw(); }
+    if (d.qtyEdit) {
+      // Type a quantity: Enter/blur saves, Escape cancels; 0 sends it to the trash like counting down does.
+      const i = Number(d.qtyEdit), s = S.stock[i];
+      const input = Object.assign(document.createElement('input'), { type: 'number', min: 0, step: 'any', value: s.qty, className: 'qty-in' });
+      input.setAttribute('aria-label', `${t('Edit amount')}: ${s.name}`);
+      el.replaceWith(input); input.focus(); input.select();
+      let gone = false;
+      const commit = () => {
+        if (gone) return; gone = true;
+        const v = Number(input.value);
+        if (!Number.isFinite(v) || v < 0 || v === s.qty) return draw();
+        s.qty = v;
+        if (v > 0) { saveStock(); return draw(); }
+        S.stock = S.stock.filter((x) => x.qty > 0); draw(); if (S.table) S.table.redraw(S.stock);
+        clearTimeout(saveT);
+        api('/api/stock', S.stock, 'PUT').then((res) => { if (res.trashed && res.trashed[0]) trashed(res.trashed[0]); }).catch((x) => say(x.message));
+      };
+      input.addEventListener('keydown', (k) => { if (k.key === 'Enter') commit(); if (k.key === 'Escape') { gone = true; draw(); } });
+      input.addEventListener('blur', commit);
+      return;
+    }
     if ('explore' in d) return openExplorer();
     if ('overview' in d) { S.overview = !S.overview; return draw(); }
     if ('overviewDone' in d) { S.overview = false; return draw(); }
@@ -565,7 +591,7 @@
 
   function merge(items) {
     for (const it of items) {
-      const ex = S.stock.find((x) => strip(x.name) === strip(it.name) && x.unit === (it.unit || 'pcs'));
+      const ex = S.stock.find((x) => norm(x.name) === norm(it.name));
       if (ex) ex.qty += Number(it.quantity) || 1;
       else S.stock.push({ id: uid(), name: it.name, qty: Number(it.quantity) || 1, unit: it.unit || 'pcs', note: it.note || '', tag: it.tag || '' });
     }
