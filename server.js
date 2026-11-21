@@ -347,16 +347,18 @@ function blocked(m, needsVision) {
   if (g.amount != null && !isFree(m) && aiQ.spentAll.get(periodStart(g.period)).cost >= g.amount) return `global budget reached for this ${g.period}`;
   return '';
 }
-// Adapters take Anthropic-shaped content (string, or [{type:'image'}, {type:'text'}]) and return { text, tin, tout }.
+// Adapters take Anthropic-shaped content (string, or [{type:'image'}, {type:'text'}]) and return { text, tin, tout, problem }.
+// problem: the reply was billed but can't be used (cut off, refused); it falls through to the next model without a cooldown.
 const ADAPTERS = {
   async anthropic(m, content, system, maxTokens) {
     const r = await fetch(`${m.base_url.replace(/\/$/, '')}/v1/messages`, { method: 'POST', signal: AbortSignal.timeout(120000),
       headers: { 'content-type': 'application/json', 'x-api-key': keyOf(m), 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: m.model, max_tokens: maxTokens, system, messages: [{ role: 'user', content }] }) });
+      // Current Claude models always think, and thinking counts toward max_tokens: leave plenty of room (it's a ceiling, not a cost).
+      body: JSON.stringify({ model: m.model, max_tokens: Math.max(maxTokens, 16000), system, messages: [{ role: 'user', content }] }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw Object.assign(new Error(d?.error?.message || `HTTP ${r.status}`), { status: r.status, retryAfter: Number(r.headers.get('retry-after')) || 0 });
-    if (d.stop_reason === 'refusal') throw new Error('The model declined this request.');
-    return { text: (d.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'), tin: d.usage?.input_tokens || 0, tout: d.usage?.output_tokens || 0 };
+    const problem = d.stop_reason === 'refusal' ? 'The model declined this request.' : d.stop_reason === 'max_tokens' ? 'Reply cut off (max_tokens reached).' : '';
+    return { text: (d.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'), tin: d.usage?.input_tokens || 0, tout: d.usage?.output_tokens || 0, problem };
   },
   // OpenAI, OpenRouter, Google Gemini (OpenAI endpoint), Groq, Mistral, Ollama, LM Studio…: base URL ends in /v1 (or equivalent).
   async openai(m, content, system, maxTokens) {
@@ -368,21 +370,22 @@ const ADAPTERS = {
       body: JSON.stringify({ model: m.model, max_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: parts }] }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw Object.assign(new Error(d?.error?.message || `HTTP ${r.status}`), { status: r.status, retryAfter: Number(r.headers.get('retry-after')) || 0 });
-    return { text: d.choices?.[0]?.message?.content || '', tin: d.usage?.prompt_tokens || 0, tout: d.usage?.completion_tokens || 0 };
+    const problem = d.choices?.[0]?.finish_reason === 'length' ? 'Reply cut off (token limit reached).' : '';
+    return { text: d.choices?.[0]?.message?.content || '', tin: d.usage?.prompt_tokens || 0, tout: d.usage?.completion_tokens || 0, problem };
   },
 };
 // One model, one attempt: records spend on success, the error (and a cooldown on rate limits/outages) on failure.
 async function tryModel(m, content, system, maxTokens, parse) {
-  let text;
+  let text, problem;
   try {
-    const r = await ADAPTERS[m.kind](m, content, system, maxTokens); text = r.text;
+    const r = await ADAPTERS[m.kind](m, content, system, maxTokens); text = r.text; problem = r.problem;
     aiQ.record.run(m.id, today(), r.tin, r.tout, (r.tin * m.price_in + r.tout * m.price_out) / 1e6); // ponytail: spend is checked before the call, so one call can overshoot a budget
   } catch (e) { // the provider failed: rate limits and outages bench the model for a while
     const cool = e.status === 429 ? e.retryAfter || 60 : e.status >= 500 || e.name === 'TimeoutError' || !e.status ? 30 : 0;
     aiQ.error.run(String(e.message).slice(0, 300), cool ? Math.floor(Date.now() / 1000) + cool : 0, m.id);
     throw e;
   }
-  try { const out = parse(text); aiQ.ok.run(m.id); return out; }
+  try { if (problem) throw new Error(problem); const out = parse(text); aiQ.ok.run(m.id); return out; }
   catch (e) { aiQ.error.run('Unusable reply: ' + String(e.message).slice(0, 280), 0, m.id); throw e; } // no cooldown: the next request may parse fine
 }
 const aiOn = () => aiQ.chain.all().some((m) => !blocked(m, false));
