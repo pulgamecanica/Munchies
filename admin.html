@@ -70,13 +70,33 @@
   .tag textarea { width: 100%; min-height: 54px; font: 12px/1.4 ui-monospace, monospace; margin-top: 6px; }
   .tag .id { font-weight: 700; } .tag .src { font-size: 12px; color: var(--muted); }
   .note { font-size: 13.5px; color: var(--muted); margin: 6px 0 12px; }
+  /* AI models: the fallback chain */
+  .chain { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: c; }
+  .mcard { border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+  .mcard.off { opacity: .6; }
+  .mcard .head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .mcard .head b { font-size: 16px; }
+  .mcard .pos { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--cell); font-weight: 800; font-size: 13px; }
+  .pill { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--cell); color: var(--muted); }
+  .pill.ok { background: color-mix(in srgb, var(--s3) 18%, transparent); color: var(--s3); }
+  .pill.bad { background: color-mix(in srgb, var(--tomato) 16%, transparent); color: var(--tomato); }
+  .pill.free { background: color-mix(in srgb, var(--s4) 20%, transparent); color: var(--s4); }
+  .fields { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; }
+  .fields label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); font-weight: 600; }
+  .fields label.check { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); align-self: center; }
+  .fields input:not([type=checkbox]) { width: 110px; padding: 5px 8px; }
+  .fields input.wide { width: 240px; } .fields input.url { width: 320px; max-width: 100%; }
+  .bar { height: 8px; border-radius: 999px; background: var(--cell); overflow: hidden; min-width: 140px; flex: 1; max-width: 260px; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+  .bar.full i { background: var(--tomato); }
+  .err { font-size: 12.5px; color: var(--tomato); white-space: normal; }
   .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Admin center</h1>
-  <p class="sub">Usage, AI limits and stock tags. Members, plans, Stripe and posts live in <a href="/ghost/">Ghost admin</a>.</p>
+  <p class="sub">Usage, AI models and budgets, member limits and stock tags. Members, plans, Stripe and posts live in <a href="/ghost/">Ghost admin</a>.</p>
   <form class="login row" id="f"><input id="t" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" aria-label="Admin token"><button class="primary">Load</button></form>
   <div id="out"></div>
 </main>
@@ -147,10 +167,107 @@
     el.addEventListener('mouseleave', () => { tip.hidden = true; });
   }
 
+  /* ---------- AI providers & models ---------- */
+  let AI = null;
+  const PRESETS = {
+    anthropic: ['Anthropic', 'anthropic', 'https://api.anthropic.com'], openai: ['OpenAI', 'openai', 'https://api.openai.com/v1'],
+    openrouter: ['OpenRouter', 'openai', 'https://openrouter.ai/api/v1'], gemini: ['Google Gemini', 'openai', 'https://generativelanguage.googleapis.com/v1beta/openai'],
+    groq: ['Groq', 'openai', 'https://api.groq.com/openai/v1'], mistral: ['Mistral', 'openai', 'https://api.mistral.ai/v1'], ollama: ['Ollama (self-hosted)', 'openai', 'http://ollama:11434/v1'],
+  };
+  const money = (v) => '$' + (Number(v) || 0).toFixed(v >= 100 ? 0 : 2);
+  const per = { day: 'today', week: 'this week', month: 'this month' };
+  const periodSel = (v) => `<select name="period">${AI.periods.map((x) => `<option value="${x}"${x === v ? ' selected' : ''}>per ${x}</option>`).join('')}</select>`;
+  const spendBar = (spent, max) => max == null ? '' : `<span class="bar${spent >= max ? ' full' : ''}" title="${money(spent)} of ${money(max)}"><i style="width:${Math.min(100, max ? (spent / max) * 100 : 100)}%"></i></span>`;
+  const modelFields = (m) => `
+    <label>Model id<input class="wide" name="model" value="${esc(m.model || '')}" placeholder="claude-sonnet-5-5" required></label>
+    <label>$ / 1M in<input name="price_in" type="number" step="any" min="0" value="${m.price_in ?? ''}" placeholder="0 = free"></label>
+    <label>$ / 1M out<input name="price_out" type="number" step="any" min="0" value="${m.price_out ?? ''}" placeholder="0 = free"></label>
+    <label>Budget $<input name="budget" type="number" step="any" min="0" value="${m.budget ?? ''}" placeholder="no limit"></label>
+    <label>Max calls<input name="max_calls" type="number" step="1" min="0" value="${m.max_calls ?? ''}" placeholder="no limit"></label>
+    <label>Limits reset${periodSel(m.period || 'month')}</label>
+    <label class="check"><input type="checkbox" name="vision"${m.vision !== 0 ? ' checked' : ''}> Reads images</label>
+    <label class="check"><input type="checkbox" name="enabled"${m.enabled !== 0 ? ' checked' : ''}> On</label>`;
+  function aiSection(ai) {
+    const prov = (id) => ai.providers.find((p) => p.id === id);
+    const b = ai.budget;
+    return `<section>
+      <h2>AI models</h2>
+      <p class="note">Every AI request tries these models <b>top to bottom</b> and uses the first one that is on, isn't cooling down after a rate limit or outage, and is under its budget and call limit. If a model fails or gives an unusable answer, the next one takes over. Free models (both prices 0) ignore budgets, so they make a good last resort. Spend is counted from each reply's real token usage.</p>
+      <form class="fields" data-ai="budget" style="margin-bottom:14px">
+        <label>Total budget, all paid models $<input name="amount" type="number" step="any" min="0" value="${b.amount ?? ''}" placeholder="no limit"></label>
+        <label>Resets${periodSel(b.period)}</label>
+        <button class="primary">Save</button>
+        <span class="muted">${money(b.spent)} spent ${per[b.period]}${b.amount != null ? ` of ${money(b.amount)}` : ''}</span>${spendBar(b.spent, b.amount)}
+      </form>
+      <ol class="chain">${ai.models.map((m, i) => `
+        <li><form class="mcard${m.enabled ? '' : ' off'}" data-ai="model" data-id="${m.id}">
+          <div class="head">
+            <span class="pos">${i + 1}</span><b>${esc(m.model)}</b><span class="muted">${esc(prov(m.provider)?.name || '?')}</span>
+            ${m.free ? '<span class="pill free">free</span>' : ''}
+            <span class="pill ${m.blocked ? 'bad' : 'ok'}">${esc(m.blocked || 'ready')}</span>
+            <span class="muted">${m.calls} calls, ${money(m.spent)} ${per[m.period]}${m.budget != null && !m.free ? ` of ${money(m.budget)}` : ''}</span>${m.free ? '' : spendBar(m.spent, m.budget)}
+          </div>
+          ${m.last_error ? `<div class="err">Last error: ${esc(m.last_error)}</div>` : ''}
+          <div class="fields">${modelFields(m)}</div>
+          <div class="row">
+            <button type="button" data-ai-act="up" ${i ? '' : 'disabled'} aria-label="Move up">↑</button><button type="button" data-ai-act="down" ${i < ai.models.length - 1 ? '' : 'disabled'} aria-label="Move down">↓</button>
+            <button class="primary">Save</button><button type="button" data-ai-act="test">Test</button><button type="button" class="danger" data-ai-act="del-model">Remove</button>
+          </div>
+        </form></li>`).join('') || '<li class="muted">No models yet: add a provider, then a model.</li>'}</ol>
+      ${ai.providers.length ? `<h3>Add a model</h3>
+      <form class="mcard" data-ai="model-new">
+        <div class="fields"><label>Provider<select name="provider">${ai.providers.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label>${modelFields({ enabled: 1, vision: 1, period: 'month' })}</div>
+        <div class="row"><button class="primary">Add to the end of the chain</button></div>
+      </form>` : ''}
+      <h3>Providers</h3>
+      <p class="note">"OpenAI-compatible" covers OpenAI, OpenRouter, Google Gemini, Groq, Mistral and self-hosted Ollama or LM Studio. Keys are stored encrypted with the server's <code>SECRET_KEY</code> and never shown again; leave the key empty to keep the current one.</p>
+      ${ai.secret ? '' : '<p class="err"><b>SECRET_KEY is not set on the server</b>, so API keys can\'t be saved here. Set it (e.g. <code>openssl rand -hex 32</code>) and restart, or leave the key empty to use ANTHROPIC_API_KEY / OPENAI_API_KEY from the environment.</p>'}
+      <div class="chain">${ai.providers.map((p) => `
+        <form class="mcard" data-ai="provider" data-id="${p.id}"><div class="fields">
+          <label>Name<input name="name" value="${esc(p.name)}"></label>
+          <label>Type<select name="kind">${ai.kinds.map((k) => `<option value="${k}"${k === p.kind ? ' selected' : ''}>${k === 'openai' ? 'OpenAI-compatible' : 'Anthropic'}</option>`).join('')}</select></label>
+          <label>Base URL<input class="url" name="base_url" value="${esc(p.base_url)}"></label>
+          <label>API key<input class="wide" name="api_key" type="password" autocomplete="off" placeholder="${esc(p.key || 'none')}"></label>
+          <button class="primary">Save</button><button type="button" class="danger" data-ai-act="del-provider">Delete</button>
+        </div></form>`).join('')}
+        <form class="mcard" data-ai="provider-new"><div class="fields">
+          <label>Preset<select name="preset"><option value="">Choose…</option>${Object.entries(PRESETS).map(([k, v]) => `<option value="${k}">${esc(v[0])}</option>`).join('')}</select></label>
+          <label>Name<input name="name" placeholder="OpenRouter"></label>
+          <label>Type<select name="kind">${ai.kinds.map((k) => `<option value="${k}">${k === 'openai' ? 'OpenAI-compatible' : 'Anthropic'}</option>`).join('')}</select></label>
+          <label>Base URL<input class="url" name="base_url" placeholder="https://…" required></label>
+          <label>API key<input class="wide" name="api_key" type="password" autocomplete="off" placeholder="sk-…"></label>
+          <button class="primary">Add provider</button>
+        </div></form>
+      </div>
+    </section>`;
+  }
+  const modelBody = (f) => ({ model: f.get('model'), price_in: f.get('price_in'), price_out: f.get('price_out'), budget: f.get('budget'), max_calls: f.get('max_calls'),
+    period: f.get('period'), vision: f.get('vision') === 'on', enabled: f.get('enabled') === 'on', provider: f.get('provider') });
+  async function aiSubmit(form) {
+    const f = new FormData(form), id = form.dataset.id, kind = form.dataset.ai;
+    if (kind === 'budget') { await call('/api/admin/ai/budget', 'PUT', { amount: f.get('amount'), period: f.get('period') }); return 'Budget saved'; }
+    if (kind === 'model') { await call('/api/admin/ai/models/' + id, 'PUT', modelBody(f)); return 'Model saved'; }
+    if (kind === 'model-new') { await call('/api/admin/ai/models', 'POST', modelBody(f)); return 'Model added'; }
+    const body = { name: f.get('name'), kind: f.get('kind'), base_url: f.get('base_url'), api_key: f.get('api_key') };
+    if (kind === 'provider') { await call('/api/admin/ai/providers/' + id, 'PUT', body); return 'Provider saved'; }
+    await call('/api/admin/ai/providers', 'POST', body); return 'Provider added';
+  }
+  async function aiAct(b) {
+    const form = b.closest('[data-ai]'), id = form.dataset.id, act = b.dataset.aiAct;
+    if (act === 'up' || act === 'down') {
+      const ids = AI.models.map((m) => m.id), i = ids.indexOf(Number(id)), j = act === 'up' ? i - 1 : i + 1;
+      [ids[i], ids[j]] = [ids[j], ids[i]]; await call('/api/admin/ai/order', 'PUT', { ids }); return load();
+    }
+    if (act === 'test') { b.disabled = true; b.textContent = 'Testing…'; const r = await call(`/api/admin/ai/models/${id}/test`, 'POST'); say(r.ok ? `OK in ${r.ms} ms: "${r.reply}"` : `Failed: ${r.error}`); return load(); }
+    if (act === 'del-model') { if (!confirm('Remove this model from the chain? Its spend history goes too.')) return; await call('/api/admin/ai/models/' + id, 'DELETE'); say('Model removed'); return load(); }
+    if (act === 'del-provider') { if (!confirm('Delete this provider and all of its models?')) return; await call('/api/admin/ai/providers/' + id, 'DELETE'); say('Provider deleted'); return load(); }
+  }
+
   async function load() {
     try { sessionStorage.setItem('rt-admin', $('#t').value); } catch {}
     try {
-      const [st, mem, tg] = await Promise.all([call('/api/admin/stats'), call('/api/admin/members'), call('/api/admin/tags')]);
+      const [st, mem, tg, ai] = await Promise.all([call('/api/admin/stats'), call('/api/admin/members'), call('/api/admin/tags'), call('/api/admin/ai')]);
+      AI = ai;
       const mo = mem.month;
       $('#out').innerHTML = `
         <div class="tiles">
@@ -163,6 +280,8 @@
         </div>
 
         <section><h2>AI use, last 30 days</h2>${chart(st)}</section>
+
+        ${aiSection(ai)}
 
         <section>
           <h2>Members</h2>
@@ -205,6 +324,7 @@
   $('#f').onsubmit = (e) => { e.preventDefault(); load(); };
   $('#out').addEventListener('click', async (e) => {
     const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.aiAct) { try { await aiAct(b); } catch (x) { say(x.message); } return; }
     const tr = b.closest('tr[data-uuid]');
     try {
       if (tr) {
@@ -223,6 +343,7 @@
   });
   $('#out').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (e.target.dataset.ai) { try { say(await aiSubmit(e.target)); load(); } catch (x) { say(x.message); } return; }
     const f = new FormData(e.target), id = e.target.dataset.tag || f.get('id');
     try {
       await call('/api/admin/tags/' + encodeURIComponent(id), 'PUT', { names: Object.fromEntries(LANGS.map((l) => [l, f.get(l)])), icon: f.get('icon') });
@@ -230,6 +351,10 @@
     } catch (x) { say(x.message); }
   });
   $('#out').addEventListener('change', async (e) => {
+    if (e.target.name === 'preset' && PRESETS[e.target.value]) {
+      const [name, kind, url] = PRESETS[e.target.value], f = e.target.form;
+      const set = (n, v) => { f.querySelector(`[name=${n}]`).value = v; }; set('name', name); set('kind', kind); set('base_url', url); return;
+    }
     if (e.target.id !== 'mode') return;
     try { await call('/api/admin/settings', 'PUT', { ai_tags: e.target.value }); say('AI tagging updated'); } catch (x) { say(x.message); }
   });

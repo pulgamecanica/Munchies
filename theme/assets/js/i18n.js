@@ -7,7 +7,7 @@
     es: {
       'Library': 'Biblioteca', 'Recipe box': 'Mis recetas', 'Get Pro': 'Hazte Pro', 'Account': 'Cuenta', 'Sign in': 'Entrar', 'Create account': 'Crear cuenta', 'Language': 'Idioma',
       "recipes you read left to right: each column combines what's behind it.": "recetas que se leen de izquierda a derecha: cada columna combina lo que tiene detrás.",
-      'Less scrolling, more cooking.': 'Menos scroll, más cocina.', "Create a recipe from any link, text or photo": "Crea una receta desde cualquier enlace, texto o foto", "Create a recipe from any recipe →": "Crea una receta a partir de cualquier receta →",
+      'Less scrolling, more cooking.': 'Menos scroll, más cocina.', "Create a recipe from any link, text or photo": "Crea una receta desde cualquier enlace, texto o foto", "Create a recipe from any recipe →": "Crea una receta a partir de cualquier receta →", "Ingredients": "Ingredientes", "Steps": "Pasos", "Saved to All ✓": "Guardada en Todas ✓",
       'No recipes yet. Write a post in Ghost admin and paste a recipe block into an HTML card.': 'Aún no hay recetas. Escribe una entrada en Ghost y pega una tabla de receta en una tarjeta HTML.',
       'Pro': 'Pro', '← Library': '← Biblioteca', 'By': 'Por', 'Time': 'Tiempo', 'Published': 'Publicado',
       'Your recipe box': 'Tu recetario', "Create a recipe from anything (a link, pasted text or a photo of a cookbook page), keep your kitchen stock, and cook from what you have.": "Crea una receta desde cualquier cosa (un enlace, texto pegado o una foto de un libro de cocina), lleva el inventario de tu cocina y cocina con lo que tienes.",
@@ -177,7 +177,7 @@
     fr: {
       'Library': 'Bibliothèque', 'Recipe box': 'Mes recettes', 'Get Pro': 'Passer Pro', 'Account': 'Compte', 'Sign in': 'Connexion', 'Create account': 'Créer un compte', 'Language': 'Langue',
       "recipes you read left to right: each column combines what's behind it.": "des recettes qui se lisent de gauche à droite : chaque colonne combine ce qui la précède.",
-      'Less scrolling, more cooking.': 'Moins de défilement, plus de cuisine.', "Create a recipe from any link, text or photo": "Créez une recette à partir d’un lien, d’un texte ou d’une photo", "Create a recipe from any recipe →": "Créez une recette à partir de n’importe quelle recette →",
+      'Less scrolling, more cooking.': 'Moins de défilement, plus de cuisine.', "Create a recipe from any link, text or photo": "Créez une recette à partir d’un lien, d’un texte ou d’une photo", "Create a recipe from any recipe →": "Créez une recette à partir de n’importe quelle recette →", "Ingredients": "Ingrédients", "Steps": "Étapes", "Saved to All ✓": "Enregistrée dans Toutes ✓",
       'No recipes yet. Write a post in Ghost admin and paste a recipe block into an HTML card.': 'Pas encore de recettes. Écrivez un article dans Ghost et collez un tableau de recette dans une carte HTML.',
       'Pro': 'Pro', '← Library': '← Bibliothèque', 'By': 'Par', 'Time': 'Temps', 'Published': 'Publié',
       'Your recipe box': 'Votre carnet de recettes', "Create a recipe from anything (a link, pasted text or a photo of a cookbook page), keep your kitchen stock, and cook from what you have.": "Créez une recette à partir de n’importe quoi (un lien, du texte collé ou la photo d’une page de livre), suivez vos stocks et cuisinez avec ce que vous avez.",
@@ -347,7 +347,7 @@
     pt: {
       'Library': 'Biblioteca', 'Recipe box': 'Minhas receitas', 'Get Pro': 'Seja Pro', 'Account': 'Conta', 'Sign in': 'Entrar', 'Create account': 'Criar conta', 'Language': 'Idioma',
       "recipes you read left to right: each column combines what's behind it.": "receitas que se leem da esquerda para a direita: cada coluna combina o que está antes dela.",
-      'Less scrolling, more cooking.': 'Menos rolagem, mais cozinha.', "Create a recipe from any link, text or photo": "Crie uma receita a partir de qualquer link, texto ou foto", "Create a recipe from any recipe →": "Crie uma receita a partir de qualquer receita →",
+      'Less scrolling, more cooking.': 'Menos rolagem, mais cozinha.', "Create a recipe from any link, text or photo": "Crie uma receita a partir de qualquer link, texto ou foto", "Create a recipe from any recipe →": "Crie uma receita a partir de qualquer receita →", "Ingredients": "Ingredientes", "Steps": "Passos", "Saved to All ✓": "Guardada em Todas ✓",
       'No recipes yet. Write a post in Ghost admin and paste a recipe block into an HTML card.': 'Ainda não há receitas. Escreva um post no Ghost e cole uma tabela de receita num cartão HTML.',
       'Pro': 'Pro', '← Library': '← Biblioteca', 'By': 'Por', 'Time': 'Tempo', 'Published': 'Publicado',
       'Your recipe box': 'O seu livro de receitas', "Create a recipe from anything (a link, pasted text or a photo of a cookbook page), keep your kitchen stock, and cook from what you have.": "Crie uma receita a partir de qualquer coisa (um link, texto colado ou uma foto de um livro de receitas), controle a sua despensa e cozinhe com o que tem.",
@@ -517,7 +517,7 @@
     it: {
       'Library': 'Biblioteca', 'Recipe box': 'Le mie ricette', 'Get Pro': 'Passa a Pro', 'Account': 'Account', 'Sign in': 'Accedi', 'Create account': 'Crea account', 'Language': 'Lingua',
       "recipes you read left to right: each column combines what's behind it.": "ricette da leggere da sinistra a destra: ogni colonna unisce ciò che la precede.",
-      'Less scrolling, more cooking.': 'Meno scroll, più cucina.', "Create a recipe from any link, text or photo": "Crea una ricetta da qualsiasi link, testo o foto", "Create a recipe from any recipe →": "Crea una ricetta da qualsiasi ricetta →",
+      'Less scrolling, more cooking.': 'Meno scroll, più cucina.', "Create a recipe from any link, text or photo": "Crea una ricetta da qualsiasi link, testo o foto", "Create a recipe from any recipe →": "Crea una ricetta da qualsiasi ricetta →", "Ingredients": "Ingredienti", "Steps": "Passaggi", "Saved to All ✓": "Salvata in Tutte ✓",
       'No recipes yet. Write a post in Ghost admin and paste a recipe block into an HTML card.': 'Ancora nessuna ricetta. Scrivi un post in Ghost e incolla una tabella ricetta in una scheda HTML.',
       'Pro': 'Pro', '← Library': '← Biblioteca', 'By': 'Di', 'Time': 'Tempo', 'Published': 'Pubblicato',
       'Your recipe box': 'Il tuo ricettario', "Create a recipe from anything (a link, pasted text or a photo of a cookbook page), keep your kitchen stock, and cook from what you have.": "Crea una ricetta da qualsiasi cosa (un link, testo incollato o la foto di un libro di cucina), tieni traccia della dispensa e cucina con quello che hai.",
@@ -687,7 +687,7 @@
     de: {
       'Library': 'Bibliothek', 'Recipe box': 'Meine Rezepte', 'Get Pro': 'Pro holen', 'Account': 'Konto', 'Sign in': 'Anmelden', 'Create account': 'Konto erstellen', 'Language': 'Sprache',
       "recipes you read left to right: each column combines what's behind it.": "Rezepte, die man von links nach rechts liest: jede Spalte verbindet, was davor steht.",
-      'Less scrolling, more cooking.': 'Weniger scrollen, mehr kochen.', "Create a recipe from any link, text or photo": "Rezept aus jedem Link, Text oder Foto erstellen", "Create a recipe from any recipe →": "Erstelle ein Rezept aus jedem Rezept →",
+      'Less scrolling, more cooking.': 'Weniger scrollen, mehr kochen.', "Create a recipe from any link, text or photo": "Rezept aus jedem Link, Text oder Foto erstellen", "Create a recipe from any recipe →": "Erstelle ein Rezept aus jedem Rezept →", "Ingredients": "Zutaten", "Steps": "Schritte", "Saved to All ✓": "In Alle gespeichert ✓",
       'No recipes yet. Write a post in Ghost admin and paste a recipe block into an HTML card.': 'Noch keine Rezepte. Schreib einen Beitrag in Ghost und füge eine Rezepttabelle in eine HTML-Karte ein.',
       'Pro': 'Pro', '← Library': '← Bibliothek', 'By': 'Von', 'Time': 'Zeit', 'Published': 'Veröffentlicht',
       'Your recipe box': 'Deine Rezeptbox', "Create a recipe from anything (a link, pasted text or a photo of a cookbook page), keep your kitchen stock, and cook from what you have.": "Erstelle ein Rezept aus allem (Link, eingefügter Text oder Foto einer Kochbuchseite), behalte deinen Vorrat im Blick und koche mit dem, was da ist.",

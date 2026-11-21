@@ -12,6 +12,7 @@ services:
       GHOST_URL: http://ghost:2368
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:${PORT:-3000}}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-not-for-production}
     volumes: [".:/app"]
     depends_on: [ghost, ocr]
 

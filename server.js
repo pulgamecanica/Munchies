@@ -8,14 +8,13 @@ const fs = require('fs');
 const path = require('path');
 const dns = require('dns').promises;
 const net = require('net');
+const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 
 const PORT = Number(process.env.PORT) || 3000;
 const GHOST = process.env.GHOST_URL || 'http://ghost:2368';
 const OCR = process.env.OCR_URL || 'http://ocr:8884';
 const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
-const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
-const BASE = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const LIMITS = { free: Number(process.env.FREE_AI_PER_MONTH ?? 5), paid: Number(process.env.PAID_AI_PER_MONTH ?? 200) };
 const RATE = Number(process.env.API_RATE_PER_MIN) || 120;
@@ -231,17 +230,173 @@ async function ocr(image) {
   return (d.text || '').trim();
 }
 
-/* ---------- Claude ---------- */
-async function callClaude(content, system, maxTokens = 3000) {
-  if (!process.env.ANTHROPIC_API_KEY) throw fail(503, 'AI is off: set ANTHROPIC_API_KEY on the server.');
-  const r = await fetch(`${BASE}/v1/messages`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content }] }),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw fail(502, data?.error?.message || `Claude API error (${r.status})`);
-  return (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+/* ---------- AI providers ---------- */
+// The admin keeps an ordered list of models (each on a provider). Every AI call walks it top to bottom and uses the first
+// model that is enabled, not cooling down after a rate limit, under its own budget and under the global budget.
+// Any failure (rate limit, outage, bad key, unusable reply) falls through to the next model.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_providers (id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, base_url TEXT NOT NULL, api_key TEXT NOT NULL DEFAULT '');
+  CREATE TABLE IF NOT EXISTS ai_models (id INTEGER PRIMARY KEY, provider INTEGER NOT NULL, model TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1, vision INTEGER NOT NULL DEFAULT 1, price_in REAL NOT NULL DEFAULT 0, price_out REAL NOT NULL DEFAULT 0,
+    budget REAL, period TEXT NOT NULL DEFAULT 'month', max_calls INTEGER, cooldown_until INTEGER NOT NULL DEFAULT 0, last_error TEXT, last_error_at INTEGER);
+  CREATE TABLE IF NOT EXISTS ai_spend (model INTEGER NOT NULL, day TEXT NOT NULL, calls INTEGER NOT NULL DEFAULT 0, tokens_in INTEGER NOT NULL DEFAULT 0,
+    tokens_out INTEGER NOT NULL DEFAULT 0, cost REAL NOT NULL DEFAULT 0, PRIMARY KEY (model, day));
+`);
+const AI_KINDS = ['anthropic', 'openai'];
+const PERIODS = ['day', 'week', 'month'];
+const KNOWN_PRICES = { 'claude-opus-5-5': [4, 20], 'claude-sonnet-5-5': [2, 10], 'claude-haiku-5-5': [0.1, 0.5] }; // USD per 1M tokens, for the seed only
+// Providers from the environment. For each one whose key (or URL) is set, a provider is created once, tied to that env var
+// (its key is read from the env on every call, never stored). <PREFIX>_MODELS optionally adds models to the end of the chain:
+// comma-separated, each "model" or "model@IN/OUT" (USD per 1M tokens). Paid models get AI_MODEL_BUDGET (default $50) per month;
+// "@0/0" and local models are free; a model with no known price is added switched off until you set its prices.
+// Everything is only ever added: after that, the admin center owns the list.
+const ENV_PROVIDERS = [
+  // env var, name, kind, base URL (overridable with <PREFIX>_BASE_URL), models prefix
+  ['ANTHROPIC_API_KEY', 'Anthropic', 'anthropic', 'https://api.anthropic.com', 'ANTHROPIC'],
+  ['OPENAI_API_KEY', 'OpenAI', 'openai', 'https://api.openai.com/v1', 'OPENAI'],
+  ['OPENROUTER_API_KEY', 'OpenRouter', 'openai', 'https://openrouter.ai/api/v1', 'OPENROUTER'],
+  ['GEMINI_API_KEY', 'Google Gemini', 'openai', 'https://generativelanguage.googleapis.com/v1beta/openai', 'GEMINI'],
+  ['GROQ_API_KEY', 'Groq', 'openai', 'https://api.groq.com/openai/v1', 'GROQ'],
+  ['MISTRAL_API_KEY', 'Mistral', 'openai', 'https://api.mistral.ai/v1', 'MISTRAL'],
+  ['OLLAMA_URL', 'Ollama', 'openai', null, 'OLLAMA'], // no key: the URL itself, e.g. http://ollama:11434/v1
+];
+if (!db.prepare('PRAGMA table_info(ai_providers)').all().some((c) => c.name === 'env')) {
+  db.exec('ALTER TABLE ai_providers ADD COLUMN env TEXT');
+  // providers created before this existed borrowed the env key by type; tie them to the right variable explicitly
+  db.exec("UPDATE ai_providers SET env = 'ANTHROPIC_API_KEY' WHERE kind = 'anthropic' AND api_key = ''");
+  db.exec("UPDATE ai_providers SET env = 'OPENAI_API_KEY' WHERE kind = 'openai' AND api_key = '' AND base_url LIKE 'https://api.openai.com%'");
+}
+const DEFAULT_BUDGET = Number(process.env.AI_MODEL_BUDGET ?? 50);
+for (const [env, name, kind, url, prefix] of ENV_PROVIDERS) {
+  if (!process.env[env]) continue;
+  let prov = db.prepare('SELECT id FROM ai_providers WHERE env = ?').get(env)?.id;
+  const firstTime = !prov;
+  if (firstTime) prov = Number(db.prepare('INSERT INTO ai_providers (name, kind, base_url, env) VALUES (?, ?, ?, ?)')
+    .run(name, kind, (process.env[prefix + '_BASE_URL'] || url || process.env[env]).replace(/\/$/, ''), env).lastInsertRowid);
+  const list = process.env[prefix + '_MODELS'] || (firstTime && env === 'ANTHROPIC_API_KEY' ? process.env.CLAUDE_MODEL || 'claude-sonnet-5-5' : '');
+  for (const entry of list.split(',').map((x) => x.trim()).filter(Boolean)) {
+    const [, model, pin, pout] = /^(.+?)(?:@([\d.]+)\/([\d.]+))?$/.exec(entry);
+    if (db.prepare('SELECT 1 FROM ai_models WHERE provider = ? AND model = ?').get(prov, model)) continue;
+    const price = pin !== undefined ? [Number(pin), Number(pout)] : env === 'OLLAMA_URL' ? [0, 0] : KNOWN_PRICES[model];
+    const pos = (db.prepare('SELECT MAX(position) AS p FROM ai_models').get().p ?? -1) + 1;
+    const free = price && !price[0] && !price[1];
+    db.prepare('INSERT INTO ai_models (provider, model, position, enabled, price_in, price_out, budget, period) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(prov, model, pos, price ? 1 : 0, price ? price[0] : 0, price ? price[1] : 0, price && !free ? DEFAULT_BUDGET : null, 'month');
+    if (!price) console.warn(`AI: ${model} (${name}) was added switched off: set its prices in the admin center, or write it as ${model}@IN/OUT.`);
+  }
+}
+// A total budget from the env applies until the admin sets one: AI_BUDGET=100, AI_BUDGET_PERIOD=day|week|month.
+if (process.env.AI_BUDGET && !setting('ai_budget', '')) db.prepare("INSERT INTO settings (key, value) VALUES ('ai_budget', ?)")
+  .run(JSON.stringify({ amount: Number(process.env.AI_BUDGET), period: PERIODS.includes(process.env.AI_BUDGET_PERIOD) ? process.env.AI_BUDGET_PERIOD : 'month' }));
+// Provider API keys are stored encrypted (AES-256-GCM) with a key derived from SECRET_KEY, which lives only in the server env:
+// a copied database or backup doesn't expose them. Without SECRET_KEY the admin center refuses to save keys.
+const SECRET = process.env.SECRET_KEY ? crypto.createHash('sha256').update(process.env.SECRET_KEY).digest() : null;
+const SEALED = 'enc:v1:';
+const seal = (plain) => {
+  if (!SECRET) throw fail(400, 'Set SECRET_KEY on the server first: API keys are stored encrypted with it.');
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', SECRET, iv);
+  const ct = Buffer.concat([c.update(plain, 'utf8'), c.final()]);
+  return SEALED + Buffer.concat([iv, c.getAuthTag(), ct]).toString('base64');
+};
+const unseal = (stored) => { // '' when missing, or when SECRET_KEY is missing or changed
+  if (!stored || !stored.startsWith(SEALED) || !SECRET) return '';
+  try {
+    const b = Buffer.from(stored.slice(SEALED.length), 'base64'), d = crypto.createDecipheriv('aes-256-gcm', SECRET, b.subarray(0, 12));
+    d.setAuthTag(b.subarray(12, 28)); return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8');
+  } catch { return ''; }
+};
+// Keys saved before encryption existed: encrypt them now (or warn until SECRET_KEY is set).
+for (const r of db.prepare("SELECT id, api_key FROM ai_providers WHERE api_key != '' AND api_key NOT LIKE 'enc:v1:%'").all()) {
+  if (SECRET) db.prepare('UPDATE ai_providers SET api_key = ? WHERE id = ?').run(seal(r.api_key), r.id);
+  else console.warn(`AI provider ${r.id} has an unencrypted API key: set SECRET_KEY and restart to encrypt it.`);
+}
+// A saved key wins; otherwise only the env var this provider is tied to (never another provider's key). Ollama-style env URLs have no key.
+const keyOf = (p) => (p.api_key && !p.api_key.startsWith(SEALED) ? p.api_key : unseal(p.api_key)) || (p.env && p.env.endsWith('_API_KEY') ? process.env[p.env] : '') || '';
+const keyLabel = (p) => { // what the admin center shows instead of the key
+  if (!p.api_key) return p.env ? (process.env[p.env] ? `from ${p.env}` : `${p.env} is not set`) : '';
+  const k = keyOf({ ...p, env: null });
+  return k ? '••••' + k.slice(-4) : 'saved key unreadable (SECRET_KEY changed?): enter it again';
+};
+const periodStart = (period) => {
+  const d = new Date(); if (period === 'month') d.setUTCDate(1);
+  if (period === 'week') d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); // Monday
+  return d.toISOString().slice(0, 10);
+};
+const aiQ = {
+  chain: db.prepare('SELECT m.*, p.name AS provider_name, p.kind, p.base_url, p.api_key, p.env FROM ai_models m JOIN ai_providers p ON p.id = m.provider ORDER BY m.position, m.id'),
+  spent: db.prepare('SELECT COALESCE(SUM(cost), 0) AS cost, COALESCE(SUM(calls), 0) AS calls FROM ai_spend WHERE model = ? AND day >= ?'),
+  spentAll: db.prepare('SELECT COALESCE(SUM(cost), 0) AS cost FROM ai_spend WHERE day >= ?'),
+  record: db.prepare(`INSERT INTO ai_spend (model, day, calls, tokens_in, tokens_out, cost) VALUES (?, ?, 1, ?, ?, ?)
+    ON CONFLICT(model, day) DO UPDATE SET calls = calls + 1, tokens_in = tokens_in + excluded.tokens_in, tokens_out = tokens_out + excluded.tokens_out, cost = cost + excluded.cost`),
+  error: db.prepare('UPDATE ai_models SET last_error = ?, last_error_at = unixepoch(), cooldown_until = MAX(cooldown_until, ?) WHERE id = ?'),
+  ok: db.prepare('UPDATE ai_models SET last_error = NULL, cooldown_until = 0 WHERE id = ?'),
+};
+const globalBudget = () => JSON.parse(setting('ai_budget', '{"amount":null,"period":"month"}'));
+const isFree = (m) => !m.price_in && !m.price_out;
+// Why a model can't take a call right now ('' = it can).
+function blocked(m, needsVision) {
+  if (!m.enabled) return 'disabled';
+  if (needsVision && !m.vision) return 'no image input';
+  if (m.cooldown_until > Date.now() / 1000) return 'cooling down after an error';
+  if (m.env && !process.env[m.env] && !m.api_key) return `${m.env} is not set`;
+  if (m.kind === 'anthropic' && !keyOf(m)) return 'no API key';
+  const s = aiQ.spent.get(m.id, periodStart(m.period));
+  if (m.budget != null && !isFree(m) && s.cost >= m.budget) return `budget reached for this ${m.period}`;
+  if (m.max_calls != null && s.calls >= m.max_calls) return `call limit reached for this ${m.period}`;
+  const g = globalBudget();
+  if (g.amount != null && !isFree(m) && aiQ.spentAll.get(periodStart(g.period)).cost >= g.amount) return `global budget reached for this ${g.period}`;
+  return '';
+}
+// Adapters take Anthropic-shaped content (string, or [{type:'image'}, {type:'text'}]) and return { text, tin, tout }.
+const ADAPTERS = {
+  async anthropic(m, content, system, maxTokens) {
+    const r = await fetch(`${m.base_url.replace(/\/$/, '')}/v1/messages`, { method: 'POST', signal: AbortSignal.timeout(120000),
+      headers: { 'content-type': 'application/json', 'x-api-key': keyOf(m), 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: m.model, max_tokens: maxTokens, system, messages: [{ role: 'user', content }] }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d?.error?.message || `HTTP ${r.status}`), { status: r.status, retryAfter: Number(r.headers.get('retry-after')) || 0 });
+    if (d.stop_reason === 'refusal') throw new Error('The model declined this request.');
+    return { text: (d.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'), tin: d.usage?.input_tokens || 0, tout: d.usage?.output_tokens || 0 };
+  },
+  // OpenAI, OpenRouter, Google Gemini (OpenAI endpoint), Groq, Mistral, Ollama, LM Studio…: base URL ends in /v1 (or equivalent).
+  async openai(m, content, system, maxTokens) {
+    const parts = typeof content === 'string' ? content : content.map((c) => (c.type === 'image'
+      ? { type: 'image_url', image_url: { url: `data:${c.source.media_type};base64,${c.source.data}` } } : { type: 'text', text: c.text }));
+    const key = keyOf(m);
+    const r = await fetch(`${m.base_url.replace(/\/$/, '')}/chat/completions`, { method: 'POST', signal: AbortSignal.timeout(120000),
+      headers: { 'content-type': 'application/json', ...(key ? { authorization: 'Bearer ' + key } : {}) },
+      body: JSON.stringify({ model: m.model, max_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: parts }] }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d?.error?.message || `HTTP ${r.status}`), { status: r.status, retryAfter: Number(r.headers.get('retry-after')) || 0 });
+    return { text: d.choices?.[0]?.message?.content || '', tin: d.usage?.prompt_tokens || 0, tout: d.usage?.completion_tokens || 0 };
+  },
+};
+// One model, one attempt: records spend on success, the error (and a cooldown on rate limits/outages) on failure.
+async function tryModel(m, content, system, maxTokens, parse) {
+  let text;
+  try {
+    const r = await ADAPTERS[m.kind](m, content, system, maxTokens); text = r.text;
+    aiQ.record.run(m.id, today(), r.tin, r.tout, (r.tin * m.price_in + r.tout * m.price_out) / 1e6); // ponytail: spend is checked before the call, so one call can overshoot a budget
+  } catch (e) { // the provider failed: rate limits and outages bench the model for a while
+    const cool = e.status === 429 ? e.retryAfter || 60 : e.status >= 500 || e.name === 'TimeoutError' || !e.status ? 30 : 0;
+    aiQ.error.run(String(e.message).slice(0, 300), cool ? Math.floor(Date.now() / 1000) + cool : 0, m.id);
+    throw e;
+  }
+  try { const out = parse(text); aiQ.ok.run(m.id); return out; }
+  catch (e) { aiQ.error.run('Unusable reply: ' + String(e.message).slice(0, 280), 0, m.id); throw e; } // no cooldown: the next request may parse fine
+}
+const aiOn = () => aiQ.chain.all().some((m) => !blocked(m, false));
+async function callAI(content, system, maxTokens = 3000, parse = (t) => t) {
+  const needsVision = Array.isArray(content) && content.some((c) => c.type === 'image');
+  const tried = [];
+  for (const m of aiQ.chain.all()) {
+    const why = blocked(m, needsVision);
+    if (why) { tried.push(`${m.model}: ${why}`); continue; }
+    try { return await tryModel(m, content, system, maxTokens, parse); }
+    catch (e) { tried.push(`${m.model}: ${e.message}`); }
+  }
+  if (tried.length) console.warn('AI: no model could answer |', tried.join(' | '));
+  throw fail(503, tried.length ? 'The AI is busy right now, try again in a few minutes.' : 'AI is off: add a provider and a model in the admin center.');
 }
 function extractJson(text) {
   const s = text.indexOf('{'), e = text.lastIndexOf('}');
@@ -354,6 +509,72 @@ async function api(req, res, p) {
         since,
       });
     }
+    /* AI providers & models: the fallback chain, budgets and spend */
+    if (p === '/api/admin/ai' && req.method === 'GET') {
+      const g = globalBudget();
+      return send(res, 200, {
+        kinds: AI_KINDS, periods: PERIODS,
+        budget: { ...g, spent: aiQ.spentAll.get(periodStart(g.period)).cost, since: periodStart(g.period) },
+        secret: Boolean(SECRET),
+        providers: db.prepare('SELECT * FROM ai_providers ORDER BY id').all().map(({ api_key, ...x }) => ({ ...x, key: keyLabel({ ...x, api_key }) })),
+        models: aiQ.chain.all().map((row) => {
+          const { api_key, base_url, env, ...m } = row, s = aiQ.spent.get(m.id, periodStart(m.period)); // never send keys to the browser
+          return { ...m, spent: s.cost, calls: s.calls, since: periodStart(m.period), free: isFree(m), blocked: blocked(row, false) };
+        }),
+      });
+    }
+    if (p === '/api/admin/ai/budget' && req.method === 'PUT') {
+      const b = await readBody(req, 4096);
+      if (!PERIODS.includes(b.period)) throw fail(400, 'Period is day, week or month.');
+      const amount = b.amount === '' || b.amount == null ? null : Math.max(0, Number(b.amount));
+      if (amount !== null && !Number.isFinite(amount)) throw fail(400, 'The budget must be a number.');
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('ai_budget', JSON.stringify({ amount, period: b.period }));
+      return send(res, 200, { ok: true });
+    }
+    const prov = /^\/api\/admin\/ai\/providers(?:\/(\d+))?$/.exec(p);
+    if (prov && (req.method === 'POST' || req.method === 'PUT')) {
+      const b = await readBody(req, 8192);
+      if (!AI_KINDS.includes(b.kind)) throw fail(400, 'Unknown provider type.');
+      const u = new URL(String(b.base_url || '')); if (!/^https?:$/.test(u.protocol)) throw fail(400, 'The base URL must be http(s).');
+      const name = String(b.name || '').trim().slice(0, 60) || u.hostname;
+      if (req.method === 'POST') return send(res, 200, { id: Number(db.prepare('INSERT INTO ai_providers (name, kind, base_url, api_key) VALUES (?, ?, ?, ?)').run(name, b.kind, u.href.replace(/\/$/, ''), b.api_key ? seal(String(b.api_key).trim()) : '').lastInsertRowid) });
+      db.prepare('UPDATE ai_providers SET name = ?, kind = ?, base_url = ? WHERE id = ?').run(name, b.kind, u.href.replace(/\/$/, ''), prov[1]);
+      if (b.api_key) db.prepare('UPDATE ai_providers SET api_key = ? WHERE id = ?').run(seal(String(b.api_key).trim()), prov[1]); // empty = keep the current key
+      return send(res, 200, { ok: true });
+    }
+    if (prov && prov[1] && req.method === 'DELETE') {
+      db.prepare('DELETE FROM ai_spend WHERE model IN (SELECT id FROM ai_models WHERE provider = ?)').run(prov[1]);
+      db.prepare('DELETE FROM ai_models WHERE provider = ?').run(prov[1]); db.prepare('DELETE FROM ai_providers WHERE id = ?').run(prov[1]);
+      return send(res, 200, { ok: true });
+    }
+    if (p === '/api/admin/ai/order' && req.method === 'PUT') {
+      const b = await readBody(req, 16384);
+      if (!Array.isArray(b.ids)) throw fail(400, 'Send { ids: [...] } top to bottom.');
+      const set = db.prepare('UPDATE ai_models SET position = ? WHERE id = ?'); b.ids.forEach((id, i) => set.run(i, Number(id)));
+      return send(res, 200, { ok: true });
+    }
+    const mod = /^\/api\/admin\/ai\/models(?:\/(\d+))?(\/test)?$/.exec(p);
+    if (mod && mod[2] && req.method === 'POST') {
+      const m = aiQ.chain.all().find((x) => x.id === Number(mod[1])); if (!m) throw fail(404, 'No such model.');
+      const t0 = Date.now();
+      try { const text = await tryModel(m, 'Reply with the single word OK.', 'You are a health check.', 50, (x) => x); return send(res, 200, { ok: true, ms: Date.now() - t0, reply: String(text).slice(0, 80) }); }
+      catch (e) { return send(res, 200, { ok: false, ms: Date.now() - t0, error: e.message }); }
+    }
+    if (mod && (req.method === 'POST' || req.method === 'PUT')) {
+      const b = await readBody(req, 8192);
+      const num = (v, min = 0) => (v === '' || v == null ? null : Number.isFinite(Number(v)) ? Math.max(min, Number(v)) : (() => { throw fail(400, 'Prices, budgets and limits must be numbers.'); })());
+      if (!PERIODS.includes(b.period)) throw fail(400, 'Period is day, week or month.');
+      const model = String(b.model || '').trim().slice(0, 120); if (!model) throw fail(400, 'Name the model, e.g. claude-sonnet-5-5.');
+      const v = [model, b.enabled ? 1 : 0, b.vision ? 1 : 0, num(b.price_in) || 0, num(b.price_out) || 0, num(b.budget), b.period, num(b.max_calls) === null ? null : Math.floor(num(b.max_calls))];
+      if (req.method === 'POST') {
+        if (!db.prepare('SELECT 1 FROM ai_providers WHERE id = ?').get(Number(b.provider))) throw fail(400, 'Pick a provider.');
+        const pos = (db.prepare('SELECT MAX(position) AS p FROM ai_models').get().p ?? -1) + 1;
+        return send(res, 200, { id: Number(db.prepare('INSERT INTO ai_models (model, enabled, vision, price_in, price_out, budget, period, max_calls, provider, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(...v, Number(b.provider), pos).lastInsertRowid) });
+      }
+      db.prepare('UPDATE ai_models SET model = ?, enabled = ?, vision = ?, price_in = ?, price_out = ?, budget = ?, period = ?, max_calls = ?, cooldown_until = 0 WHERE id = ?').run(...v, mod[1]);
+      return send(res, 200, { ok: true });
+    }
+    if (mod && mod[1] && req.method === 'DELETE') { db.prepare('DELETE FROM ai_models WHERE id = ?').run(mod[1]); db.prepare('DELETE FROM ai_spend WHERE model = ?').run(mod[1]); return send(res, 200, { ok: true }); }
     const reset = /^\/api\/admin\/members\/([a-f0-9-]+)\/reset$/i.exec(p);
     if (reset && req.method === 'POST') { q.reset.run(reset[1], month()); return send(res, 200, { ok: true }); }
     throw fail(404, 'Not found');
@@ -365,7 +586,7 @@ async function api(req, res, p) {
   const stock = JSON.parse(row.stock), recipes = JSON.parse(row.recipes);
 
   if (p === '/api/me') {
-    return send(res, 200, { member: { email: m.email, name: m.name, status: m.status }, usage: usageOf(m), ai: Boolean(process.env.ANTHROPIC_API_KEY),
+    return send(res, 200, { member: { email: m.email, name: m.name, status: m.status }, usage: usageOf(m), ai: aiOn(),
       prefs: JSON.parse(q.getPrefs.get(m.uuid)?.prefs || '{}'), staff: await isStaff(req) });
   }
   if (p === '/api/prefs' && req.method === 'PUT') {
@@ -401,13 +622,13 @@ async function api(req, res, p) {
   if (p === '/api/daily' && req.method === 'GET') {
     const d = JSON.parse(q.getDaily.get(m.uuid)?.daily || 'null');
     if (d && d.date === today()) return send(res, 200, d);
-    if (!stock.length || !process.env.ANTHROPIC_API_KEY) return send(res, 200, null);
+    if (!stock.length || !aiOn()) return send(res, 200, null);
     const lang = langOf(new URL(req.url, 'http://x').searchParams.get('lang'));
     if (!dailyJobs.has(m.uuid)) {
       const prompt = `Create one inviting everyday recipe, today's pick, using mainly these ingredients: ${stock.map((x) => x.name).slice(0, 60).join(', ')}.\n` +
         'Assume salt, pepper, oil and water are available; anything else not listed is optional or minimal.\n' + RECIPE_SHAPE + writeIn(lang);
-      dailyJobs.set(m.uuid, callClaude(prompt, RECIPE_SYSTEM).then((text) => {
-        const daily = { date: today(), recipe: asRecipe(text, { id: 'daily-' + today(), lang: lang || undefined, daily: true }), claimed: false };
+      dailyJobs.set(m.uuid, callAI(prompt, RECIPE_SYSTEM, 3000, (text) => asRecipe(text, { id: 'daily-' + today(), lang: lang || undefined, daily: true })).then((recipe) => {
+        const daily = { date: today(), recipe, claimed: false };
         q.setDaily.run(JSON.stringify(daily), m.uuid); track('daily');
         return daily;
       }).finally(() => dailyJobs.delete(m.uuid)));
@@ -542,7 +763,7 @@ async function api(req, res, p) {
     const tags = aiTagMode() === 'off' ? [] : tagList();
     const prompt = RECOGNIZE_PROMPT + (langOf(body.lang) ? ` Write names and notes in ${LANG_NAMES[body.lang]} instead of English.` : '') +
       (tags.length ? ` Also give each item a "tag": the best id from ${JSON.stringify(tags.map((t) => ({ id: t.id, name: t.names.en })))}, or "" if none fits.` : '');
-    const items = await withQuota(m, 'recognize', async () => extractJson(await callClaude([img, { type: 'text', text: prompt }], 'You identify food in photos for a kitchen stock tracker. Reply with JSON only.', 1200)).items);
+    const items = await withQuota(m, 'recognize', async () => (await callAI([img, { type: 'text', text: prompt }], 'You identify food in photos for a kitchen stock tracker. Reply with JSON only.', 1200, extractJson)).items);
     const ids = new Set(tags.map((t) => t.id));
     return send(res, 200, { items: (Array.isArray(items) ? items : []).map((it) => ({ ...it, tag: ids.has(it.tag) ? it.tag : '' })) });
   }
@@ -559,7 +780,7 @@ async function api(req, res, p) {
           '{"id":"kebab-case english","names":{"en":"","es":"","fr":"","pt":"","it":"","de":""},"icon":"inner SVG for a 24x24 viewBox: a simple line icon of the category made of <path>, <circle>, <ellipse> or <rect> elements only, no fills, no text"}. '
         : 'Use only these tag ids; if none fits, use "". ') +
       'Reply with JSON only: {"assign":[{"i":0,"tag":"id"}],"new":[]}';
-    const out = await withQuota(m, 'sort', async () => extractJson(await callClaude(prompt, 'You organise a kitchen stock into categories. Reply with JSON only.', 4000)));
+    const out = await withQuota(m, 'sort', async () => await callAI(prompt, 'You organise a kitchen stock into categories. Reply with JSON only.', 4000, extractJson));
     const created = [];
     if (mode === 'create') {
       const ins = db.prepare("INSERT OR IGNORE INTO tags (id, names, icon, source) VALUES (?, ?, ?, 'ai')");
@@ -578,7 +799,7 @@ async function api(req, res, p) {
     const prompt = `Create one recipe using mainly these ingredients: ${ing.join(', ')}.\n` +
       (body.notes ? `Preferences: ${String(body.notes).slice(0, 500)}\n` : '') +
       'Assume salt, pepper, oil and water are available; anything else not listed is optional or minimal.\n' + RECIPE_SHAPE + writeIn(body.lang);
-    return send(res, 200, await withQuota(m, 'generate', async () => asRecipe(await callClaude(prompt, RECIPE_SYSTEM), { generated: true, lang: langOf(body.lang) || undefined })));
+    return send(res, 200, await withQuota(m, 'generate', async () => await callAI(prompt, RECIPE_SYSTEM, 3000, (t) => asRecipe(t, { generated: true, lang: langOf(body.lang) || undefined }))));
   }
   if (p === '/api/convert') {
     // "Make a table": from a link, pasted text, or a photo of a cookbook page (OCR first, vision as fallback).
@@ -597,7 +818,7 @@ async function api(req, res, p) {
     const extra = writeIn(body.lang);
     if (typeof content === 'string') content += extra; else content[1].text += extra;
     return send(res, 200, await withQuota(m, 'convert', async () => {
-      const r = asRecipe(await callClaude(content, RECIPE_SYSTEM, 4000), { lang: langOf(body.lang) || undefined });
+      const r = await callAI(content, RECIPE_SYSTEM, 4000, (t) => asRecipe(t, { lang: langOf(body.lang) || undefined }));
       return { ...r, source: { ...(r.source || {}), ...source } };
     }));
   }
@@ -608,7 +829,7 @@ async function api(req, res, p) {
     const { id, source, lang, ...text } = r;
     const prompt = `Translate this recipe JSON into ${LANG_NAMES[l]}. Translate title, description, tags, every steps[].text, every steps[].uses[].name and notes. ` +
       'Keep every other key, number, unit, emoji and the "after" arrays exactly as they are. Reply with the full JSON only.\n\n' + JSON.stringify(text).slice(0, 60000);
-    return send(res, 200, await withQuota(m, 'translate', async () => ({ ...asRecipe(await callClaude(prompt, RECIPE_SYSTEM, 4000)), id: `${id || 'r'}-${l}`, source, lang: l })));
+    return send(res, 200, await withQuota(m, 'translate', async () => ({ ...await callAI(prompt, RECIPE_SYSTEM, 4000, asRecipe), id: `${id || 'r'}-${l}`, source, lang: l })));
   }
   throw fail(404, 'Not found');
 }
@@ -635,7 +856,7 @@ const server = http.createServer(async (req, res) => {
 server.headersTimeout = 20000;
 server.requestTimeout = 120000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Recepees gateway on :${PORT} -> Ghost ${GHOST}, OCR ${OCR} | AI ${process.env.ANTHROPIC_API_KEY ? 'on (' + MODEL + ')' : 'off'} | admin ${ADMIN_TOKEN ? 'on' : 'off (set ADMIN_TOKEN)'}`);
+  console.log(`Recepees gateway on :${PORT} -> Ghost ${GHOST}, OCR ${OCR} | AI models ${aiQ.chain.all().filter((m) => m.enabled).map((m) => m.model).join(' → ') || 'none'} | admin ${ADMIN_TOKEN ? 'on' : 'off (set ADMIN_TOKEN)'} | stored API keys ${SECRET ? 'encrypted' : 'off (set SECRET_KEY)'}`);
 });
 const stop = () => server.close(() => { db.close(); process.exit(0); });
 process.on('SIGTERM', stop);

@@ -37,6 +37,7 @@ No npm dependencies anywhere: Node 24 built-ins, plain browser JS, Ghost and Tes
 **For the site owner**
 - Accounts, plans and payments are **native Ghost** (Portal + Stripe).
 - **Admin center** (`/api/admin`): analytics, per-member usage editing and bonus AI uses, stock tags with SVG icons, AI tagging mode.
+- **AI models you control**: any number of providers (Anthropic, or anything OpenAI-compatible: OpenAI, OpenRouter, Gemini, Groq, Mistral, self-hosted Ollama) and models, in a fallback order. Each request uses the first model that is on, not rate-limited and under its budget; failures fall through to the next. Budgets in dollars per day, week or month, per model and in total; free models have no limit and make a good last resort.
 - **Ghost design settings**: kitchen name and default colour theme.
 
 ## How it fits together
@@ -92,12 +93,16 @@ Docker Compose reads `.env` for both stacks; in Coolify set the same names as en
 
 | Variable | Default | |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | (empty) | turns on the AI features |
-| `CLAUDE_MODEL` | `claude-sonnet-5-5` | |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `OLLAMA_URL` | (empty) | optional: each one that is set adds that AI provider, tied to its variable (the key is read from the env, never stored). Or add providers in the admin center instead. |
+| `<NAME>_MODELS` (e.g. `OPENROUTER_MODELS`) | (empty) | models to add to the end of the fallback chain, comma-separated: `model` or `model@IN/OUT` (USD per 1M tokens; `@0/0` = free). A new `ANTHROPIC_API_KEY` without `ANTHROPIC_MODELS` adds `CLAUDE_MODEL` (default `claude-sonnet-5-5`). Unknown prices are added switched off. Only ever adds; the admin center owns the list. |
+| `AI_MODEL_BUDGET` | `50` | monthly dollar budget given to each paid model added from the env |
+| `AI_BUDGET` / `AI_BUDGET_PERIOD` | (none) / `month` | total cap for all paid models, used until you set one in the admin center |
+| `<NAME>_BASE_URL` | the provider's API | override a provider's address (e.g. `ANTHROPIC_BASE_URL` for a proxy) |
 | `FREE_AI_PER_MONTH` / `PAID_AI_PER_MONTH` | `5` / `200` | AI uses per member per month |
 | `SORT_FREE_PER_MONTH` / `SORT_PAID_PER_MONTH` | `3` / `30` | AI stock sorts per month (also count toward the allowance) |
 | `API_RATE_PER_MIN` | `120` | per-IP limit on `/api/*` |
 | `ADMIN_TOKEN` | `dev` | unlocks `/api/admin`. **Use a long random value in production.** |
+| `SECRET_KEY` | (empty; dev stack: a fixed dev value) | encrypts the AI provider API keys you save in the admin center (AES-256-GCM); without it, keys can't be saved there. Generate with `openssl rand -hex 32`. If it is lost or changed, re-enter the keys. |
 | `OCR_LANGS` | `eng+fra` | Tesseract languages (installed: eng fra deu spa ita por nld; add more in `ocr/Dockerfile`) |
 | `PORT` / `MAIL_UI_PORT` | `3000` / `8026` | dev host ports |
 | `GHOST_VERSION` | `6` | dev Ghost image tag |
@@ -178,7 +183,8 @@ There are two compose files for production:
    | `PUBLIC_URL` | the same domain, with `https://` |
    | `MYSQL_PASSWORD` | a long random password (also used for the MySQL user) |
    | `ADMIN_TOKEN` | a long random string (unlocks `/api/admin`) |
-   | `ANTHROPIC_API_KEY` | turns on the AI features |
+   | `SECRET_KEY` | `openssl rand -hex 32`: encrypts AI provider keys saved in the admin center. Keep a copy; if it changes, re-enter the keys |
+   | `ANTHROPIC_API_KEY` (and/or `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `OLLAMA_URL`, each with optional `<NAME>_MODELS`) | optional: AI providers from the env; or add them in `/api/admin`, where you also order models and set budgets |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | needed so members can sign in (magic links) |
    | `RECEPEES_VERSION` | optional: pin a release, e.g. `1.0.0` (default `latest`) |
 6. **Deploy.** Open `https://your.domain/ghost` and create the owner account, then **Settings → Design → activate "recepees"** (once). Create a **page** with the slug `how-to-read` for the explainer. Connect Stripe under **Settings → Membership** for paid plans. Turn on comments under **Settings → Membership → Commenting** (all members or paid only); the theme shows them under every post.

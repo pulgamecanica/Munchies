@@ -58,6 +58,9 @@
 
   function toMarkdown(recipe, f) {
     const L = [`# ${recipe.title}`, recipe.description || '', ''];
+    // Shopping list first: every ingredient in the order it's used, scaled to the chosen servings.
+    const ing = (recipe.steps || []).flatMap((s) => (s.uses || []).map((u) => `- ${`${amount(u, f)} ${u.name}`.trim()}${u.optional ? ` (${t('optional')})` : ''}`));
+    if (ing.length) L.push(`## ${t('Ingredients')}`, ...ing, '', `## ${t('Steps')}`);
     (recipe.steps || []).forEach((s, i) => {
       const uses = (s.uses || []).map((u) => `${amount(u, f)} ${u.name}`.trim()).join(', ');
       L.push(`${i + 1}. ${s.text}${uses ? ` (${uses})` : ''}`);

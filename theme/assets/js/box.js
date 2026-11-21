@@ -567,8 +567,9 @@
     const f = new FormData(e.target);
     if (e.target.id === 'add') { if (f.get('name').trim()) merge([{ name: f.get('name').trim(), quantity: 1, unit: 'pcs' }]); draw(); return; }
     if (e.target.id === 'gen') {
+      // Generated recipes are saved straight away, so they show up in "All" without an extra click.
       const r = await ai('gen', () => api('/api/generate', { ingredients: S.stock.map((s) => s.name), notes: f.get('notes'), lang }));
-      if (r) open(r);
+      if (r) { const saved = await api('/api/recipes', r).catch((x) => { say(x.message); return null; }); if (saved) { S.recipes.push(saved); draw(); say(t('Saved to All ✓')); } open(saved || r); }
     }
     if (e.target.id === 'convert' && e.submitter && e.submitter.name === 'ocr') {
       // Free OCR: drop the text into the Paste tab so it can be fixed up before spending an AI use.
