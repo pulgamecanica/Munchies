@@ -10,9 +10,9 @@ Create a **page** (not a post) with the slug **`how-to-read`**. Ghost uses the `
 
 ## Art direction
 - **Line only.** One stroke weight (3 units on a 400×320 canvas), round caps and joins, no fills, no shading, no text in the drawing.
-- **Colour comes from the theme.** Use `stroke="currentColor"`: dark lines on light themes, light lines on Night. Never hard-code a colour.
+- **Colour comes from the theme.** Use `stroke="currentColor"`: dark lines on light themes, light lines on Night. Never hard-code a colour. The one splash of colour is branding (the flour bag's label): classes `brand` (filled with the palette's `--accent`) and `brand-mark` (drawn in `--accent-ink`), so it changes with the palette.
 - **Draw-in.** Every shape draws itself in when its scene starts; the length is measured automatically, so any `<path>`, `<ellipse>`, `<circle>`, `<rect>`, `<line>` or `<polyline>` works. Draw each shape in the order you'd sketch it, because the path direction is the drawing direction.
-- **Arms.** Two arms enter from the bottom corners, with the shoulders off-canvas (left at −20,340, right at 420,340). Keep them simple and friendly: a sleeve line, a wrist, mitten-like hands. Poses rotate and translate each arm around its shoulder.
+- **Arms.** Only the hand that is doing something is shown (one hand whisks; ingredients, pours and the spatula move on their own). Arms enter from the bottom corners, with the shoulders off-canvas (left at −20,340, right at 420,340). Keep them simple and friendly: a sleeve line, a wrist, mitten-like hands. Poses rotate and translate each arm around its shoulder.
 - **Props** sit on one counter line (y = 292). Keep them recognisable from the outline alone: a flour bag, a sugar jar, a milk bottle, an egg, a butter block, two bowls, a whisk, a pan, a pancake and a plate.
 - **Motion.** Calm and readable. A loop of about 0.5 s for whisking, about 1 s for tapping, about 1.6 s for flipping. Nothing flashes, and the motion stops when the player is paused. With reduced motion turned on, everything is static.
 - **The table is the hero.** The drawing is a supporting character; highlights on the table must always be readable.
@@ -28,6 +28,10 @@ Create a **page** (not a post) with the slug **`how-to-read`**. Ghost uses the `
 | `pan`, `pancake` (inner `.toss` group) | pan and pancake | dish |
 | `plate` | stack of pancakes on a plate | done |
 
+**Timed reveals.** A scene can list `"reveal": { "flour": 0, "sugar": 1 }` (prop id → recipe row): that drawing stays hidden until its row lights up, then draws itself in, so each ingredient appears exactly when the table names it.
+
+**In-scene timeline** (seconds from the scene's start): `"poses": [{"at": 5.6, "pose": "whisk"}]` changes the arms mid-scene; `"show": {"whisk": 5.6}` brings a drawing in later; `"drops": [{"at": 0.6, "row": 0, "prop": "flour"}]` adds an ingredient: a copy of the prop flies into the bowl (`"into"`, default `bowl-a`), shrinking, and its amount pops up with a small burst ("+200 g"). Without `prop`, only the amount and name pop. `"crack": true` (for the egg) cracks the drawing along a zigzag instead of flying it: the shell halves tip away and the yolk drops in. Amounts and names come from the recipe row, and with `drops` the rows light up as they land.
+
 Want more props or poses? Add an element with a new id, list it in a scene's `props`, and add a pose block in `theme/assets/css/screen.css` (search for `arm poses`).
 
 ## Storyboard (62 s, placeholder recipe: Sunday pancakes)
@@ -35,11 +39,11 @@ Want more props or poses? Add an element with a new id, list it in a scene's `pr
 |---|---|---|---|---|---|---|
 | 1 | 0:00–0:07 | `intro` | `idle`, resting | counter line | whole table | This is a recipe, drawn as a map. You read it from left to right, like a sentence. |
 | 2 | 0:07–0:16 | `ingredients` | `gather`, reaching in turn | flour, sugar, milk, egg and butter pop in | ingredient rows light up one by one | Down the left: every ingredient, in the order you will use it. It is your shopping list too. |
-| 3 | 0:16–0:26 | `dry` | `whisk` over bowl A | bowl A, whisk, flour, sugar | rows 1–4 + the first "Whisk" | A step sits right next to what it uses. This Whisk covers the flour, sugar, baking powder and salt: whisk exactly those together. |
-| 4 | 0:26–0:35 | `wet` | `crack` an egg over bowl B | both bowls, egg, milk | rows 5–7 + the second "Whisk" | Steps in the same column can happen in any order. In a second bowl, whisk the milk, eggs and melted butter. |
+| 3 | 0:16–0:26 | `dry` | `idle`, then `whisk` at +5.6 s | the flour and the sugar fly into bowl A (+0.6 s, +1.9 s), baking powder and salt pop as text (+3.3 s, +4.5 s); then the hand brings the whisk and mixes | each row lights as it lands + the first "Whisk" | A step sits right next to what it uses. This Whisk covers the flour, sugar, baking powder and salt: whisk exactly those together. |
+| 4 | 0:26–0:35 | `wet` | `idle`, then `whisk-b` at +5.6 s | the egg floats over bowl B and cracks, the yolk drops in (+1 s); the milk and the butter fly in (+2.6 s, +4 s); then the hand whisks bowl B | each row lights as it lands + the second "Whisk" | Steps in the same column can happen in any order. In a second bowl, whisk the milk, eggs and melted butter. |
 | 5 | 0:35–0:44 | `fold` | `pour` bowl B into bowl A | both bowls (B tilts) | rows 1–7 + both Whisks + "Fold together" | Each new column combines everything to its left. Fold the two bowls together. |
-| 6 | 0:44–0:54 | `dish` | `flip` the pancake | pan, pancake tossing | everything + the dish | The last column is the dish: everything has come together. Cook each pancake two to three minutes per side. |
-| 7 | 0:54–1:02 | `done` | `serve` the plate | plate with a stack | steps tick off one by one | Tap each step as you finish it, and change the servings at the top. That is all: now you can read any recipe here. |
+| 6 | 0:44–0:54 | `dish` | `flip`: no hands, a spatula flicks the pancake up and catches it | electric hob in the worktop (glowing zone), pan, spatula, pancake tossing | everything + the dish | The last column is the dish: everything has come together. Cook each pancake two to three minutes per side. |
+| 7 | 0:54–1:02 | `done` | `away` (no hands) | a stack of pancakes with butter and syrup, on a plate in the middle of the worktop | steps tick off one by one | Tap each step as you finish it, and change the servings at the top. That is all: now you can read any recipe here. |
 
 Captions for all 6 languages are in `storyboard.json` (`scenes[].caption`). To use a different recipe, replace `recipe` in the JSON and adjust each scene's `highlight.rows` (ingredient row numbers, top to bottom from 0) and `highlight.steps` (step numbers from 0).
 

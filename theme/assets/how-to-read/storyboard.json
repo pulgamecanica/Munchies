@@ -1,5 +1,5 @@
 {
-  "_doc": "Drives the 'How to read a recipe' player. Times are in seconds. pose = arm animation (see art partial), props = drawing ids shown in the scene, highlight = recipe rows/steps lit up (seq: reveal one by one across the scene), done = steps ticked off. Edit freely; see docs/how-to-read/STORYBOARD.md.",
+  "_doc": "Drives the 'How to read a recipe' player. Times are in seconds. pose = arm animation (see art partial), props = drawing ids shown in the scene, highlight = recipe rows/steps lit up (seq: reveal one by one across the scene), done = steps ticked off, reveal = {prop id: row}: the drawing appears the moment that row lights up. Edit freely; see docs/how-to-read/STORYBOARD.md. Inside a scene (seconds from its start): poses = [{at, pose}] changes the arms, show = {prop id: at} brings a drawing in, drops = [{at, row, prop?, into?}] sends a copy of the prop into the bowl (into, default bowl-a) and pops the row's amount (and name, without a prop); with drops, rows light up as they land.",
   "duration": 62,
   "audio": {
     "en": "voice-en.mp3",
@@ -130,6 +130,13 @@
         ],
         "seq": "rows"
       },
+      "reveal": {
+        "flour": 0,
+        "sugar": 1,
+        "milk": 4,
+        "egg": 5,
+        "butter": 6
+      },
       "caption": {
         "en": "Down the left: every ingredient, in the order you will use it. It is your shopping list too.",
         "es": "A la izquierda, todos los ingredientes en el orden en que los usarás. También es tu lista de la compra.",
@@ -143,7 +150,36 @@
       "id": "dry",
       "start": 16,
       "end": 26,
-      "pose": "whisk",
+      "pose": "away",
+      "poses": [
+        {
+          "at": 5.6,
+          "pose": "whisk"
+        }
+      ],
+      "drops": [
+        {
+          "at": 0.6,
+          "prop": "flour",
+          "row": 0
+        },
+        {
+          "at": 1.9,
+          "prop": "sugar",
+          "row": 1
+        },
+        {
+          "at": 3.3,
+          "row": 2
+        },
+        {
+          "at": 4.5,
+          "row": 3
+        }
+      ],
+      "show": {
+        "whisk": 5.6
+      },
       "props": [
         "bowl-a",
         "whisk",
@@ -174,12 +210,44 @@
       "id": "wet",
       "start": 26,
       "end": 35,
-      "pose": "crack",
+      "pose": "away",
+      "poses": [
+        {
+          "at": 5.6,
+          "pose": "whisk-b"
+        }
+      ],
+      "drops": [
+        {
+          "at": 1.0,
+          "prop": "egg",
+          "row": 5,
+          "into": "bowl-b",
+          "crack": true
+        },
+        {
+          "at": 2.6,
+          "prop": "milk",
+          "row": 4,
+          "into": "bowl-b"
+        },
+        {
+          "at": 4.0,
+          "prop": "butter",
+          "row": 6,
+          "into": "bowl-b"
+        }
+      ],
+      "show": {
+        "whisk-b": 5.6
+      },
       "props": [
         "bowl-a",
         "bowl-b",
         "egg",
-        "milk"
+        "milk",
+        "butter",
+        "whisk-b"
       ],
       "highlight": {
         "rows": [
@@ -205,6 +273,12 @@
       "start": 35,
       "end": 44,
       "pose": "pour",
+      "poses": [
+        {
+          "at": 4.5,
+          "pose": "pour-back"
+        }
+      ],
       "props": [
         "bowl-a",
         "bowl-b"
@@ -240,8 +314,10 @@
       "end": 54,
       "pose": "flip",
       "props": [
+        "hob",
         "pan",
-        "pancake"
+        "pancake",
+        "spatula"
       ],
       "highlight": {
         "rows": [
@@ -271,7 +347,7 @@
       "id": "done",
       "start": 54,
       "end": 62,
-      "pose": "serve",
+      "pose": "away",
       "props": [
         "plate"
       ],

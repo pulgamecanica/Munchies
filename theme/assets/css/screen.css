@@ -620,43 +620,103 @@ script[type="application/recipe+json"] { display: none; }
 /* line art: shapes draw themselves in when a scene starts (each shape's real length is measured in JS as --len) */
 .ht-svg .prop { opacity: 0; transition: opacity .3s; }
 .ht-svg .prop.on { opacity: 1; }
-.ht-svg .drawn :is(path, ellipse, circle, rect, line, polyline, polygon) { stroke-dasharray: var(--len); animation: ht-draw 1.1s cubic-bezier(.6, 0, .3, 1) both; }
+.ht-svg .drawn :is(path, ellipse, circle, rect, line, polyline, polygon) { stroke-dasharray: var(--len); stroke-dashoffset: var(--gap, 0); animation: ht-draw 1.1s cubic-bezier(.6, 0, .3, 1) both; }
+/* the worktop isn't drawn in, but keeps the same sketchy open corners (--gap, set in howto.js) */
+.ht-svg .counter :is(path) { stroke-dasharray: var(--len); stroke-dashoffset: var(--gap, 0); }
 .ht-svg .counter { opacity: .5; }
-@keyframes ht-draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+.ht-svg .counter .far { opacity: .45; stroke-width: 1.5; }
+/* props and hands are filled with the background so they sit on the worktop instead of showing its lines through them */
+.ht-svg .prop :is(path, ellipse), .ht-svg .hand path { fill: var(--bg); }
+.ht-svg .arm .hand { stroke-width: 2.4; } /* scaled by .8, so ~1.9: fine lines for fingers */
+.ht-svg .arm .crease { opacity: .5; } .ht-svg .arm .nail { opacity: .75; }
+/* flour branding: the label takes the palette accent, its wheat ear the accent's ink; the colour fades in once the outline is drawn */
+.ht-svg .prop .brand { fill: var(--accent); stroke-width: 1.5; } /* a label: thinner than the package outline */
+#sugar { stroke-width: 1.75; } /* small cubes: a finer line than the other props */
+.ht-svg .prop .grain { stroke-width: 1.5; opacity: .6; } /* sugar crystals */
+.ht-svg .prop .lip { stroke-width: 1.5; } /* the inner edge of a bowl's rim */
+.whisk { stroke-width: 2; } .whisk .wire { stroke-width: 1.5; } /* thin wires, like a real whisk */
+.ht-svg .prop .brand-mark { fill: none; stroke: var(--accent-ink); stroke-width: 1.6; }
+.ht-svg .drawn :is(.brand, .brand-mark) { animation: ht-draw 1.1s cubic-bezier(.6, 0, .3, 1) both, ht-fill .5s .8s both; }
+@keyframes ht-fill { from { fill-opacity: 0; } }
+/* an ingredient flying into the bowl (a copy, already drawn) and its amount popping up */
+.ht-svg .flying :is(path, ellipse, circle) { animation: none; stroke-dasharray: none; }
+.ht-svg .settled :is(path, ellipse, circle) { animation-delay: -5s; } /* moved in the drawing order mid-scene: already drawn, don't redraw */
+.ht-svg .ht-pop { font: 800 15px/1 var(--sans, system-ui), sans-serif; fill: var(--ink); stroke: var(--bg); stroke-width: 5px; paint-order: stroke; text-anchor: middle; transform-box: fill-box; transform-origin: center; }
+.ht-svg .ht-burst { fill: none; stroke: var(--accent); stroke-width: 2.5px; }
+@keyframes ht-draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: var(--gap, 0); } } /* --gap > 0 leaves the end of the line undrawn */
 
 /* arm poses (set by the storyboard); motion only while playing */
-.ht-svg .arm { transition: transform .8s cubic-bezier(.3, .7, .2, 1); }
+.ht-svg .arm { transition: transform .8s cubic-bezier(.3, .7, .2, 1), opacity .5s; }
+/* hands only show up when they have something to do: "away", and the pours, keep them out of the picture */
+:is([data-pose="away"], [data-pose="pour"], [data-pose="pour-back"], [data-pose="flip"]) .arm, :is([data-pose="whisk"], [data-pose="whisk-b"]) #arm-l { opacity: 0; }
+:is([data-pose="away"], [data-pose="pour"], [data-pose="pour-back"], [data-pose="flip"], [data-pose="whisk"], [data-pose="whisk-b"]) #arm-l { transform: rotate(-10deg) translate(-30px, 90px); }
+:is([data-pose="away"], [data-pose="pour"], [data-pose="pour-back"], [data-pose="flip"]) #arm-r { transform: rotate(10deg) translate(30px, 90px); }
 #arm-l { transform-origin: -20px 340px; } #arm-r { transform-origin: 420px 340px; }
 [data-pose="idle"] #arm-l { transform: rotate(-16deg) translate(-20px, 40px); }
 [data-pose="idle"] #arm-r { transform: rotate(16deg) translate(20px, 40px); }
+/* scene 1: the worktop stays put, only the hands sway a little */
+.moving[data-pose="idle"] #arm-l { animation: ht-sway 3.2s ease-in-out infinite; }
+.moving[data-pose="idle"] #arm-r { animation: ht-sway 3.2s ease-in-out -1.6s infinite reverse; }
+/* later scenes: the worktop and its props drift together, never separately */
+.moving:not([data-pose="idle"]) #worktop { animation: ht-drift 4s ease-in-out infinite; }
 [data-pose="gather"] #arm-l { transform: rotate(-6deg); } [data-pose="gather"] #arm-r { transform: rotate(6deg); }
 .moving[data-pose="gather"] #arm-l { animation: ht-reach 2.4s ease-in-out infinite; }
 .moving[data-pose="gather"] #arm-r { animation: ht-reach 2.4s ease-in-out infinite reverse; }
-.moving[data-pose="gather"] .prop.on { animation: ht-bob 2.4s ease-in-out infinite; }
-.moving[data-pose="gather"] #sugar, .moving[data-pose="gather"] #egg { animation-delay: -.6s; }
-.moving[data-pose="gather"] #milk, .moving[data-pose="gather"] #butter { animation-delay: -1.2s; }
-[data-pose="whisk"] #arm-r { transform: translate(-120px, -20px) rotate(-8deg); } [data-pose="whisk"] #arm-l { transform: rotate(-4deg) translate(0, 10px); }
-.moving[data-pose="whisk"] #arm-r, .moving[data-pose="whisk"] #whisk .spin { animation: ht-whisk .5s linear infinite; }
-#whisk .spin { transform-origin: 145px 205px; }
-[data-pose="crack"] #arm-r { transform: translate(-30px, -10px); } [data-pose="crack"] #arm-l { transform: translate(110px, -16px) rotate(4deg); }
-.moving[data-pose="crack"] #arm-r { animation: ht-tap .9s ease-in-out infinite; }
-.moving[data-pose="crack"] #egg { animation: ht-tap .9s ease-in-out infinite; }
-[data-pose="pour"] #arm-l { transform: translate(140px, -30px) rotate(8deg); } [data-pose="pour"] #arm-r { transform: rotate(10deg) translate(10px, 30px); }
-#bowl-b .tilt { transform-origin: 266px 262px; transition: transform .9s; }
+/* whisking in bowl A ("whisk") or bowl B ("whisk-b", 130 units to the right); only the whisking hand is shown */
+[data-pose="whisk"] #arm-r { transform: translate(-85px, -15px) rotate(-8deg); }
+[data-pose="whisk-b"] #arm-r { transform: translate(45px, -15px) rotate(-8deg); }
+/* entering: hand and whisk start 60 units higher, then the hand lowers the whisk into the bowl (.enter is set by howto.js) */
+.enter[data-pose="whisk"] #arm-r { transform: translate(-85px, -75px) rotate(-8deg); } .enter[data-pose="whisk-b"] #arm-r { transform: translate(45px, -75px) rotate(-8deg); }
+/* the whisk appears only once the hand has arrived */
+.ht-svg .drawn.whisk :is(path, ellipse) { animation-duration: .5s; animation-delay: .75s; }
+.whisk .dip { transform: translateY(-60px); transition: transform .8s cubic-bezier(.3, .7, .2, 1); } /* raised until the hand lowers it */
+[data-pose="whisk"]:not(.enter) #whisk .dip, [data-pose="whisk-b"]:not(.enter) #whisk-b .dip { transform: none; }
+/* holding something: the right hand closes into a fist while whisking */
+.ht-svg .fist, :is([data-pose="whisk"], [data-pose="whisk-b"]) #arm-r .hand:not(.fist) { visibility: hidden; }
+:is([data-pose="whisk"], [data-pose="whisk-b"]) #arm-r .fist { visibility: visible; }
+.moving[data-pose="whisk"] :is(#arm-r, #whisk .spin), .moving[data-pose="whisk-b"] :is(#arm-r, #whisk-b .spin) { animation: ht-whisk .5s linear infinite; }
+/* the egg floats above bowl B until it cracks (scene "wet") */
+[data-scene="wet"] #egg { transform: translateY(-34px); }
+.moving[data-scene="wet"] #egg { animation: ht-float 1.8s ease-in-out infinite; }
+.ht-svg #egg.cracked { visibility: hidden; }
+.ht-svg .yolk { fill: var(--yolk, #ffc23d); }
+/* cooking: an electric hob in the worktop; the zone under the pan glows and pulses while playing */
+.ht-svg #hob .glass { fill: color-mix(in srgb, var(--ink) 7%, var(--bg)); stroke-width: 2.5; }
+.ht-svg #hob .ring { fill: none; stroke-width: 1.5; opacity: .7; } .ht-svg #hob .ring.off { opacity: .4; }
+.ht-svg #hob .heat { fill: none; stroke: var(--heat, #ef5a24); stroke-width: 2; }
+.ht-svg #hob .ctrl-map { fill: none; stroke-width: 1; opacity: .3; } /* the controls mirror the zones: two at the back, one at the front */
+.ht-svg #hob .ctrl { fill: currentColor; stroke-width: 1; opacity: .45; } .ht-svg #hob .ctrl.on { fill: var(--heat, #ef5a24); stroke: var(--heat, #ef5a24); opacity: 1; }
+.moving #hob .heat { animation: ht-glow 1.8s ease-in-out infinite; } .moving #hob .heat:nth-of-type(odd) { animation-delay: -.6s; }
+@keyframes ht-glow { 50% { opacity: .45; } }
+.ht-svg .prop .syrup { fill: var(--syrup); stroke-width: 2; }
+/* butter pat: a light top and two warmer sides, so it reads as a block of butter */
+.ht-svg .prop .pat-top { fill: #fff1b8; stroke-width: 1.75; } .ht-svg .prop .pat-side { fill: #ffd35a; stroke-width: 1.75; } .ht-svg .prop .pat-side.dark { fill: #f2bd3a; }
+/* the sauce on the pancakes follows the palette: blueberry, honey, strawberry, maple */
+:root { --syrup: #d9892b; }
+:root:not([data-palette]), [data-palette="enamel"] { --syrup: #5b57d9; }
+[data-palette="pastel"] { --syrup: #e8a024; }
+[data-palette="summer"] { --syrup: #e4434f; }
+[data-palette="night"] { --syrup: #d9892b; } /* a yolk is yolk-coloured on every palette (palettes may override --yolk) */
+/* fold: bowl B pours into bowl A ("pour"), then bowl A pours back into bowl B ("pour-back") */
+#bowl-a .tilt { transform-origin: 136px 262px; transition: transform .9s; } #bowl-b .tilt { transform-origin: 266px 262px; transition: transform .9s; }
 [data-pose="pour"] #bowl-b .tilt { transform: translate(-40px, -46px) rotate(-38deg); }
 .moving[data-pose="pour"] #bowl-b .tilt { animation: ht-pour 2.6s ease-in-out infinite; }
-[data-pose="flip"] #arm-r { transform: translate(-60px, 30px) rotate(-4deg); } [data-pose="flip"] #arm-l { transform: rotate(-14deg) translate(-10px, 30px); }
-.moving[data-pose="flip"] #arm-r { animation: ht-flip 1.6s cubic-bezier(.5, 0, .5, 1) infinite; }
+[data-pose="pour-back"] #bowl-a .tilt { transform: translate(40px, -46px) rotate(38deg); }
+.moving[data-pose="pour-back"] #bowl-a .tilt { animation: ht-pour-back 2.6s ease-in-out infinite; }
+/* cooking: the spatula flicks the pancake up, it flips in the air and lands back on the spatula */
+#spatula .flick { transform-origin: 104px 200px; }
+.moving[data-pose="flip"] #spatula .flick { animation: ht-flick 1.6s cubic-bezier(.5, 0, .5, 1) infinite; }
+.ht-svg .prop .slot { stroke-width: 1.5; }
 #pancake .toss { transform-origin: 198px 248px; }
 .moving[data-pose="flip"] #pancake .toss { animation: ht-toss 1.6s cubic-bezier(.5, 0, .5, 1) infinite; }
-[data-pose="serve"] #arm-l { transform: translate(60px, 20px) rotate(-2deg); } [data-pose="serve"] #arm-r { transform: translate(-60px, 20px) rotate(2deg); }
-.moving[data-pose="serve"] #plate { animation: ht-bob 2s ease-in-out infinite; }
 @keyframes ht-reach { 50% { transform: rotate(4deg) translate(0, -10px); } }
-@keyframes ht-bob { 50% { transform: translateY(-6px); } }
+@keyframes ht-sway { 0%, 100% { rotate: -1deg; } 50% { rotate: 1deg; } }
+@keyframes ht-drift { 50% { translate: 0 -3px; } }
 @keyframes ht-whisk { 0% { translate: 0 0; } 25% { translate: 8px 4px; } 50% { translate: 0 8px; } 75% { translate: -8px 4px; } }
-@keyframes ht-tap { 50% { translate: 0 10px; } }
+@keyframes ht-float { 50% { translate: 0 -4px; } }
 @keyframes ht-pour { 50% { transform: translate(-46px, -52px) rotate(-52deg); } }
-@keyframes ht-flip { 40% { translate: 0 -26px; } }
+@keyframes ht-pour-back { 50% { transform: translate(46px, -52px) rotate(52deg); } }
+@keyframes ht-flick { 0%, 80%, 100% { translate: 0 0; rotate: 0deg; } 22% { translate: 0 -30px; rotate: -8deg; } 40% { translate: 0 -18px; rotate: -3deg; } 70% { translate: 0 -6px; rotate: 0deg; } }
 @keyframes ht-toss { 40% { transform: translateY(-70px) scaleY(-1); } 80% { transform: translateY(0) scaleY(1); } }
 @media (prefers-reduced-motion: reduce) { .ht-svg *, .ht-svg .drawn * { animation: none !important; transition: none !important; } }
 /* the player's table always fits its panel */
